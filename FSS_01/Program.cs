@@ -19,7 +19,7 @@ namespace FSS_01
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string path = "E:/FSS_01/FSS_01/test/code3.asm";
+            string path = "E:/source/FSWS/FSS_01/tests/P02/code1.asm";
             CompiladorSx comp = new CompiladorSx(path);
 
             comp.compile();
@@ -38,8 +38,10 @@ namespace FSS_01
             {
                 List<IToken> tokens = new List<IToken>();
                 string line = temp[i].Line.ToString();
+                Console.WriteLine("Linea: " + line);
                 while (i < temp.Count && line == temp[i].Line.ToString())
                 {
+                    Console.WriteLine(temp[i].Text);
                     tokens.Add(temp[i]);
                     i++;
                 }
@@ -62,7 +64,7 @@ namespace FSS_01
                     if (j < tokens.Count)
                     {
                         tmptype = comp.getTokenType(tokens[j].Type);
-                        while (tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text))
+                        while (tmptype != null && (tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text)))
                         {
                             if (formato == "-")
                                 switch (tmptype)
@@ -106,8 +108,26 @@ namespace FSS_01
                     else if (opers.Contains("@")) modo = "Indirecto";
                     else modo = "Simple";
                 }
-                // formato a int, si es - es 0
-                programCounter += (formato == "-") ? 0 : int.Parse(formato);
+                Console.WriteLine("Linea: " + line);
+                string errlex = comp.lexelistener.getErrorByLine(int.Parse(line));
+                string errparse = comp.parslistener.getErrorByLine(int.Parse(line));
+                Console.WriteLine("Error lexico: " + errlex);
+                Console.WriteLine("Error sintactico: " + errparse);
+                if (errlex != null)
+                {
+                    modo = "Error: Sintaxis";
+                }
+                else if(errparse != null)
+                {
+                    if (errparse.Contains("alternative")) modo = "Error: Instrucción no existe";
+                    else modo = "Error: Sintaxis";
+                }
+                else
+                {
+                    // formato a int, si es - es 0
+                    programCounter += (formato == "-") ? 0 : int.Parse(formato);
+                }
+                Console.WriteLine("===============================");
                 table.dataGridView.Rows.Add(line, formato, cp, etq, ins, opers, modo);
             }
 

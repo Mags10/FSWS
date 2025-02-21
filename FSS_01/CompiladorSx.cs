@@ -120,7 +120,9 @@ namespace FSS_01
     internal class ErrorParserListener : IAntlrErrorListener<IToken>
     {
         private String errores = "";
+        public List<Tuple<int, string>> errorsLines = new List<Tuple<int, string>>();
         private int c = 0;
+
         public String getErrores()
         {
             return errores;
@@ -136,7 +138,20 @@ namespace FSS_01
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
             errores += $"Line {line}:{charPositionInLine} - {msg}\n";
+            errorsLines.Add(new Tuple<int, string>(line, msg));
             c++;
+        }
+
+        public string getErrorByLine(int line)
+        {
+            foreach (var error in errorsLines)
+            {
+                if (error.Item1 == line)
+                {
+                    return error.Item2;
+                }
+            }
+            return null;
         }
     }
 
@@ -145,6 +160,8 @@ namespace FSS_01
     {
         private int c = 0;
         private String errores = "";
+        public List<Tuple<int, string>> errorsLines = new List<Tuple<int, string>>();
+
         public String getErrores()
         {
             return errores;
@@ -160,7 +177,20 @@ namespace FSS_01
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
             errores += $"Line {line}:{charPositionInLine} - {msg}\n";
+            errorsLines.Add(new Tuple<int, string>(line, msg));
             c++;
+        }
+
+        public string getErrorByLine(int line)
+        {
+            foreach (var error in errorsLines)
+            {
+                if (error.Item1 == line)
+                {
+                    return error.Item2;
+                }
+            }
+            return null;
         }
     }
 }

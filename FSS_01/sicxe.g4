@@ -39,8 +39,9 @@ f4              :   '+' f3;
 f3              :   simple3 | indirecto3 | inmediato3 | 'RSUB';
 
 f2              :   CODOPF2 (REG ',' (REG | NUM)) 
-                |   REG 
-                |   NUM;
+                |   CODOPF2 REG
+                |   CODOPF2 NUM
+                ;
 
 f1              :   CODOPF1;
 
@@ -69,7 +70,7 @@ START           :   'START';
 CODOPF1         :   'FIX' | 'FLOAT' | 'HIO' | 'NORM' | 'SIO' | 'TIO';
 
 CODOPF2         :   'ADDR' | 'CLEAR' | 'COMPR' | 'DIVR' | 'MULR' | 'RMO' 
-                |   'SHIFTL' | 'SHIFTR' | 'SVC' | 'TIXR'
+                |   'SHIFTL' | 'SHIFTR' | 'SVC' | 'TIXR' | 'SUBR' 
                 ;
 
 CODOPF3         :   'ADD' | 'ADDF' | 'AND' | 'COMP' | 'COMPF' | 'DIV' 
