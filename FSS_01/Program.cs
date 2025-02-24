@@ -19,7 +19,7 @@ namespace FSS_01
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string path = "E:/source/FSWS/FSS_01/tests/P02/code1.asm";
+            string path = "E:/source/FSWS/FSS_01/tests/P02/code2.asm";
             CompiladorSx comp = new CompiladorSx(path);
 
             comp.compile();
@@ -32,8 +32,9 @@ namespace FSS_01
             string[] columns = { "NUM", "FORMATO", "CP", "ETQ", "INS", "OPER", "MODO" };
             foreach (var col in columns) table.dataGridView.Columns.Add(col, col);
             // Agregar una fila vacia para los errores
-            string[] direcs = { "START", "END", "BASE", "BYTE", "WORD", "RESB", "RESW", "+" };
+            string[] direcs = { "START", "END", "BASE", "BYTE", "WORD", "RESB", "RESW", "+", "RSUB" };
             int programCounter = 0;
+            List<Tuple<string, int>> tabsym = new List<Tuple<string, int>>();
             for (int i = 0; i < temp.Count; i++)
             {
                 List<IToken> tokens = new List<IToken>();
@@ -52,12 +53,27 @@ namespace FSS_01
                 string ins = "";
                 string opers = "";
                 string modo = "";
+                string errortop = "";
+                bool errors = false;
                 int j = 0;
                 string tmptype = comp.getTokenType(tokens[j].Type);
                 if (tmptype == "ID" || tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text))
                 {
                     if (tmptype == "ID")
                     {
+                        Tuple<string, int> tup = new Tuple<string, int>(tokens[j].Text, programCounter);
+                        // Revisar si el nombre de la etiqueta ya existe
+                        foreach (var t in tabsym)
+                        {
+                            if (t.Item1 == tup.Item1)
+                            {
+                                //Console.WriteLine("Error: Etiqueta ya existe");
+                                errortop = "Error: Símbolo duplicado";
+                                errors = true;
+                                break;
+                            }
+                        }
+                        tabsym.Add(tup);
                         etq = tokens[j].Text;
                         j++;
                     }
@@ -67,6 +83,9 @@ namespace FSS_01
                         while (tmptype != null && (tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text)))
                         {
                             if (formato == "-")
+                                // Revisar si no es RSUB
+                                if (tokens[j].Text == "RSUB") formato = "3";
+                                else 
                                 switch (tmptype)
                                 {
                                     case string s when s.Contains("1"):
@@ -75,7 +94,7 @@ namespace FSS_01
                                     case string s when s.Contains("2"):
                                         formato = "2";
                                         break;
-                                    case string s when s.Contains("3"):
+                                    case string s when s.Contains("3") || s == "RSUB":
                                         formato = "3";
                                         break;
                                     default:
@@ -116,22 +135,97 @@ namespace FSS_01
                 if (errlex != null)
                 {
                     modo = "Error: Sintaxis";
+                    errors = true;
                 }
-                else if(errparse != null)
+                else if (errparse != null)
                 {
                     if (errparse.Contains("alternative")) modo = "Error: Instrucción no existe";
                     else modo = "Error: Sintaxis";
+                    errors = true;
                 }
                 else
                 {
                     // formato a int, si es - es 0
                     programCounter += (formato == "-") ? 0 : int.Parse(formato);
+                    if (formato == "-")
+                    {
+                        // Revisar si la operación es una directiva
+                        if (direcs.Contains(ins))
+                        {
+                            switch (ins)
+                            {
+                                case "START":
+                                    break;
+                                case "END":
+                                    break;
+                                case "BASE":
+                                    break;
+                                case "BYTE":
+                                    // programCounter += 1;
+                                    // Si contiene una "C'" o "c'" contar el numero de caracteres, cada uno necesita un byte (Ejemplo: C'HELLO' = 5 bytes)
+                                    // Si contiene una "X'" o "x'" contar el numero de nibles, cada dos nibles necesitan un byte´(Ejemplo: X'F1' = 1 byte)
+                                    if (opers.Contains("C'") || opers.Contains("c'"))
+                                    {
+                                        var val = opers.Replace("C'", "").Replace("c'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
+                                        Console.WriteLine(val + " " + val.Length);
+                                        programCounter += val.Length;
+                                    }
+                                    else
+                                    {
+                                        var val = opers.Replace("X'", "").Replace("x'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
+                                        Console.WriteLine(val + " " + val.Length);
+                                        programCounter += (val.Length % 2 == 0) ? val.Length / 2 : (val.Length / 2) + 1;
+                                    }
+                                    break;
+                                case "WORD":
+                                    // Una palabra son 3 bytes
+                                    programCounter += 3;
+                                    break;
+                                case "RESB":
+                                    //programCounter += int.Parse(opers);
+                                    // Si hay una h o H, tratar como hexadecimal, si no como decimal
+                                    if (opers.Contains("H") || opers.Contains("h"))
+                                    {
+                                        programCounter += int.Parse(opers.Replace("H", "").Replace("h", ""), System.Globalization.NumberStyles.HexNumber);
+                                    }
+                                    else
+                                    {
+                                        programCounter += int.Parse(opers);
+                                    }
+                                    break;
+                                case "RESW":
+                                    // programCounter += int.Parse(opers) * 3;
+                                    // Si hay una h o H, tratar como hexadecimal, si no como decimal
+                                    if (opers.Contains("H") || opers.Contains("h"))
+                                    {
+                                        programCounter += int.Parse(opers.Replace("H", "").Replace("h", ""), System.Globalization.NumberStyles.HexNumber) * 3;
+                                    }
+                                    else
+                                    {
+                                        programCounter += int.Parse(opers) * 3;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
                 }
+                if (errortop != "") modo = errortop;
                 Console.WriteLine("===============================");
-                table.dataGridView.Rows.Add(line, formato, cp, etq, ins, opers, modo);
-            }
 
+                // Cp formateado a 4
+                String cpFormat = cp.PadLeft(4, '0');
+                var row = table.dataGridView.Rows[table.dataGridView.Rows.Add(line, formato, cpFormat, etq, ins, opers, modo)];
+                if (errors)
+                {
+                    // Color del texto en rojo
+                    row.DefaultCellStyle.ForeColor = System.Drawing.Color.Red;
+                }
+            }
+            // Ajustar tabla a contenido
+            table.dataGridView.AutoResizeColumns();
             Application.Run(table);
+
+            table.dataGridView.AutoResizeColumns();
         }
     }
 
