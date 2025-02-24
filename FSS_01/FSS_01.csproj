@@ -112,6 +112,7 @@
     <Content Include="tests\P01\out.txt" />
     <Content Include="tests\P02\code1.asm" />
     <Content Include="tests\P02\code2.asm" />
+    <Content Include="tests\P02\code3.asm" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

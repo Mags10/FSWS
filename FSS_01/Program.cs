@@ -35,6 +35,7 @@ namespace FSS_01
             string[] direcs = { "START", "END", "BASE", "BYTE", "WORD", "RESB", "RESW", "+", "RSUB" };
             int programCounter = 0;
             List<Tuple<string, int>> tabsym = new List<Tuple<string, int>>();
+            Tuple<string, int> tup = null;
             for (int i = 0; i < temp.Count; i++)
             {
                 List<IToken> tokens = new List<IToken>();
@@ -61,19 +62,17 @@ namespace FSS_01
                 {
                     if (tmptype == "ID")
                     {
-                        Tuple<string, int> tup = new Tuple<string, int>(tokens[j].Text, programCounter);
+                        tup = new Tuple<string, int>(tokens[j].Text, programCounter);
                         // Revisar si el nombre de la etiqueta ya existe
                         foreach (var t in tabsym)
                         {
                             if (t.Item1 == tup.Item1)
                             {
                                 //Console.WriteLine("Error: Etiqueta ya existe");
-                                errortop = "Error: Símbolo duplicado";
                                 errors = true;
                                 break;
                             }
                         }
-                        tabsym.Add(tup);
                         etq = tokens[j].Text;
                         j++;
                     }
@@ -220,12 +219,34 @@ namespace FSS_01
                     // Color del texto en rojo
                     row.DefaultCellStyle.ForeColor = System.Drawing.Color.Red;
                 }
+                else
+                {
+                    if (tup != null && ins != "START" && ins != "END")
+                    {
+                        tabsym.Add(tup);
+                    }
+                }
+                tup = null;
             }
             // Ajustar tabla a contenido
             table.dataGridView.AutoResizeColumns();
             Application.Run(table);
 
             table.dataGridView.AutoResizeColumns();
+
+            // Mostrar otra tabla con la tabla de símbolos
+            vistas.Table table2 = new vistas.Table();
+            // Añadir columnas al DataGridView ETQ, VALOR
+            string[] columns2 = { "ETQ", "VALOR" };
+            foreach (var col in columns2) table2.dataGridView.Columns.Add(col, col);
+            foreach (var tup2 in tabsym)
+            {
+                var row = table2.dataGridView.Rows[table2.dataGridView.Rows.Add(tup2.Item1, tup2.Item2.ToString("X"))];
+            }
+            // Ajustar tabla a contenido
+            table2.dataGridView.AutoResizeColumns();
+            Application.Run(table2);
+
         }
     }
 
