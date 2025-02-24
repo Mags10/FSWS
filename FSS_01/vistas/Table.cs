@@ -12,9 +12,10 @@ namespace FSS_01.vistas
 {
     public partial class Table : Form
     {
-        public Table()
+        public Table(String title)
         {
             InitializeComponent();
+            this.Text = title;
         }
     }
 }
