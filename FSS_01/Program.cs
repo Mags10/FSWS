@@ -16,7 +16,7 @@ namespace FSS_01
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string path = "E:/source/FSWS/FSS_01/tests/P02/code1.asm";
+            string path = "E:/source/FSWS/FSS_01/tests/P03/code1.asm";
             CompiladorSx comp = new CompiladorSx(path);
             comp.compile();
 
