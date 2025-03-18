@@ -41,6 +41,12 @@ namespace FSS_01
         private List<Tuple<string,int>> opers = new List<Tuple<string, int>>();
         // Relación de registros y su código de operación
         private List<Tuple<string, int>> regs = new List<Tuple<string, int>>();
+        // Codigo objeto
+        private string objCode = "";
+        // Path de archivo
+        private string path;
+        // Cuadro de texto para mostrar el objcode
+        public RichTextBox objTextBox = new RichTextBox();
 
         public CompiladorSx(string path)
         {
@@ -58,6 +64,7 @@ namespace FSS_01
 
         public void loadCode(string path)
         {
+            this.path = path;
             string[] lines = System.IO.File.ReadAllLines(path);
             // juntar todas las lineas en un solo string sin eliminar los saltos de linea
             string cad = string.Join("\n", lines);
@@ -102,6 +109,14 @@ namespace FSS_01
             //symTable = new Table("Tabla de símbolos");
             postCompileAnalizer();
             generateObjectCode();
+            // Exportar obj a mismo directorio del archivo
+            string objPath = path.Replace(".asm", ".obj");
+            System.IO.File.WriteAllText(objPath, objCode);
+            objTextBox.Text = objCode;
+
+            // Configurar objeTextBox para que use todo el espacio del control
+            objTextBox.Dock = DockStyle.Fill;
+
             createTables();
             alreadyCompiled = true;
             date = DateTime.Now;
@@ -308,6 +323,33 @@ namespace FSS_01
 
         private void generateObjectCode()
         {
+            string cad = "H";
+            // Etiqueta de start
+            string start = "";
+            // buscar la etiqueta de start
+            foreach (Line line in midData)
+            {
+                if (line.instruccion == "START")
+                {
+                    start = line.etiqueta;
+                    break;
+                }
+            }
+            Console.WriteLine("Generando código objeto para: " + start);
+            // concatenar la etiqueta de start a 6 caracteres desde la izquierda, si no, rellenar con espacios
+            cad += start.PadRight(6, ' ');
+
+            // Poner la dirección de inicio en 6 caracteres desde la izquierda, si no, rellenar con ceros
+            cad += midData[0].cp.PadLeft(6, '0');
+
+            // Poner la dirección final en 6 caracteres desde la izquierda, si no, rellenar con ceros
+            cad += midData[midData.Count - 1].cp.PadLeft(6, '0');
+
+            Console.WriteLine(cad);
+
+            string tmpcad = "";
+            int count = 0;
+
             if (!pstCmpAnlz) return;
 
             int baseAddress = -1;
@@ -349,16 +391,16 @@ namespace FSS_01
                     }
                     else if (line.formato == "3" || line.formato == "4")
                     {
-                        Console.WriteLine("Instrucción: " + line.instruccion);
+                        //Console.WriteLine("Instrucción: " + line.instruccion);
                         // Pasar codop a binario
                         string bin = Convert.ToString(oper.Item2, 2);
-                        Console.WriteLine(bin);
+                        //Console.WriteLine(bin);
                         // Poner a 8 bits
                         bin = bin.PadLeft(8, '0');
-                        Console.WriteLine(bin);
+                        //Console.WriteLine(bin);
                         // Quitar ultimos 2 bits (LSB)
                         bin = bin.Substring(0, bin.Length - 2);
-                        Console.WriteLine(bin);
+                        //Console.WriteLine(bin);
                         if (line.instruccion == "RSUB")
                         {
                             line.codobj = "4C0000";
@@ -371,32 +413,32 @@ namespace FSS_01
                             String b = "0";
                             String p = "0";
                             String e = "0";
-                            Console.WriteLine("Modo: " + line.modo);
+                            //Console.WriteLine("Modo: " + line.modo);
                             // Si es inmediato
                             if (line.modo == "Inmediato")
                             {
-                                Console.WriteLine("Inmediato");
+                                //Console.WriteLine("Inmediato");
                                 i = "1";
                                 n = "0";
                             }
                             // Si es indirecto
                             else if (line.modo == "Indirecto")
                             {
-                                Console.WriteLine("Indirecto");
+                               // Console.WriteLine("Indirecto");
                                 i = "0";
                                 n = "1";
                             }
                             // Si es simple
                             else
                             {
-                                Console.WriteLine("Simple");
+                                //Console.WriteLine("Simple");
                                 i = "1";
                                 n = "1";
                             }
                             // Si es extendido
                             if (line.formato == "4")
                             {
-                                Console.WriteLine("Extendido");
+                                //Console.WriteLine("Extendido");
                                 e = "1";
                                 // Si es RSUB
                                 if (line.instruccion == "RSUB")
@@ -408,7 +450,7 @@ namespace FSS_01
                             // Si es indexado
                             if (line.operadores.Contains("X"))
                             {
-                                Console.WriteLine("Indexado");
+                                //Console.WriteLine("Indexado");
                                 x = "1";
                             }
 
@@ -457,15 +499,15 @@ namespace FSS_01
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Error: Etiqueta no encontrada");
+                                    //Console.WriteLine("Error: Etiqueta no encontrada");
                                     error = "Error: Etiqueta no encontrada";
                                 }
                             }
 
                             if (line.formato == "3")
                             {
-                                Console.WriteLine("Operandos: " + operando);
-                                Console.WriteLine("Direccion: " + dir);
+                              //  Console.WriteLine("Operandos: " + operando);
+                              //  Console.WriteLine("Direccion: " + dir);
                                 // Con la dirección, calcular si es relativa a PC o Base
                                 // Se revisa con el CP de la siguiente instrucción
                                 // Obtener indice actual
@@ -474,18 +516,18 @@ namespace FSS_01
                                 int nextcp = int.Parse(midData[index + 1].cp, System.Globalization.NumberStyles.HexNumber);
                                 // Calcular la dirección relativa
                                 int rel = dir - nextcp;
-                                Console.WriteLine("Relativa: " + rel);
+                                //Console.WriteLine("Relativa: " + rel);
 
                                 // Ahora calcular respecto a la base
                                 int baseDir = dir - baseAddress;
-                                Console.WriteLine("Base: " + baseDir);
+                               // Console.WriteLine("Base: " + baseDir);
 
                                 // Si no es etiqueta y es inmediato
-                                Console.WriteLine("Etiqueta: " + isetiqueta);
-                                Console.WriteLine("modo: " + line.modo);
+                               // Console.WriteLine("Etiqueta: " + isetiqueta);
+                               // Console.WriteLine("modo: " + line.modo);
                                 if (!isetiqueta)
                                 {
-                                    Console.WriteLine("Inmediato");
+                                  //  Console.WriteLine("Inmediato");
                                     p = "0";
                                     b = "0";
                                     // Pasar a binario
@@ -494,7 +536,7 @@ namespace FSS_01
                                 // Esta dentro del rango -2048 a 2047
                                 else if (-2048 <= rel && rel <= 2047)
                                 {
-                                    Console.WriteLine("Relativo a PC");
+                                  //  Console.WriteLine("Relativo a PC");
                                     p = "1";
                                     b = "0";
                                     // Pasar a binario
@@ -503,7 +545,7 @@ namespace FSS_01
                                 // Esta dentro del rango de la base
                                 else if (0 <= baseDir && baseDir <= 4095)
                                 {
-                                    Console.WriteLine("Relativo a Base");
+                                   // Console.WriteLine("Relativo a Base");
                                     p = "0";
                                     b = "1";
                                     // Pasar a binario
@@ -512,19 +554,19 @@ namespace FSS_01
                                 // Si no, error
                                 else
                                 {
-                                    Console.WriteLine("Error: No relativo al CP/B");
+                                    //Console.WriteLine("Error: No relativo al CP/B");
                                     error = "Error: No relativo al CP/B";
                                 }
                             }
                             else
                             {
-                                Console.WriteLine("Operandos (f4): " + dir);
+                                //Console.WriteLine("Operandos (f4): " + dir);
                                 // Pasar a binario
                                 desp = Convert.ToString(dir, 2);
                                 // Revisar si es simple e indexada, si lo es, es error
                                 if (x == "1" && n == "1")
                                 {
-                                    Console.WriteLine("Error: No existe combinación de MD");
+                                    //Console.WriteLine("Error: No existe combinación de MD");
                                     error = "Error: No existe combinación de MD";
                                 }
                             }
@@ -555,7 +597,7 @@ namespace FSS_01
                             }
 
                             line.codobj = bin + n + i + x + b + p + e + desp;
-                            Console.WriteLine(line.codobj);
+                           // Console.WriteLine(line.codobj);
                             // Pasar a hex de 4 en 4 para no perder ceros
                             string hex = "";
                             for (int ij = 0; ij < line.codobj.Length; ij += 4)
@@ -564,8 +606,8 @@ namespace FSS_01
                             }
                             line.codobj = hex;
 
-                            Console.WriteLine(line.codobj);
-                            Console.WriteLine("=====================================");
+                            //Console.WriteLine(line.codobj);
+                            //Console.WriteLine("=====================================");
 
                         }
                     }
@@ -574,7 +616,7 @@ namespace FSS_01
                 {
                     if (line.instruccion.Contains("BASE"))
                     {
-                        Console.WriteLine("BASE");
+                        //Console.WriteLine("BASE");
                         // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
                         line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
                         // Buscar en la tabla de símbolos
@@ -583,13 +625,13 @@ namespace FSS_01
                         {
                             baseAddress = int.Parse(sym.Item2, System.Globalization.NumberStyles.HexNumber);
                         }
-                        Console.WriteLine("Base: " + baseAddress);
-                        Console.WriteLine("=====================================");
+                        //Console.WriteLine("Base: " + baseAddress);
+                        //Console.WriteLine("=====================================");
                     }
                     // Revisar si fue BYTE
                     else if (line.instruccion.Contains("BYTE"))
                     {
-                        Console.WriteLine("BYTE");
+                        //Console.WriteLine("BYTE");
                         // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
                         line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
                         // Si contiene una "C'" o "c'" contar el numero de caracteres, cada uno necesita un byte (Ejemplo: C'HELLO' = 5 bytes)
@@ -597,7 +639,7 @@ namespace FSS_01
                         if (line.operadores.Contains("C'") || line.operadores.Contains("c'"))
                         {
                             var val = line.operadores.Replace("C'", "").Replace("c'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                            Console.WriteLine(val + " " + val.Length);
+                            //Console.WriteLine(val + " " + val.Length);
                             // Si es un caracter, pasar a ascii
                             line.codobj = "";
                             foreach (char c in val)
@@ -608,17 +650,17 @@ namespace FSS_01
                         else
                         {
                             var val = line.operadores.Replace("X'", "").Replace("x'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                            Console.WriteLine(val + " " + val.Length);
+                           // Console.WriteLine(val + " " + val.Length);
                             line.codobj = val;
                             // Si es impar, agregar un 0 al inicio
                             if (val.Length % 2 != 0) line.codobj = "0" + line.codobj;
                         }
-                        Console.WriteLine("=====================================");
+                        //Console.WriteLine("=====================================");
                     }
                     // Revisar si fue WORD
                     else if (line.instruccion.Contains("WORD"))
                     {
-                        Console.WriteLine("WORD");
+                        //Console.WriteLine("WORD");
                         // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
                         line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
                         // Revisar si es hexadecimal o decimal
@@ -633,12 +675,122 @@ namespace FSS_01
                         // Pasar a 6 caracteres
                         line.codobj = line.codobj.PadLeft(6, '0');
                     }
+                }
 
+                // Revisar si hay un corte de registro de texto
+                // Cuando hay un ORG, END, BASE, BYTE, WORD, RESB, RESW, RSUB
+                if (line.instruccion == "ORG" || line.instruccion == "END" || line.instruccion == "RESB" || line.instruccion == "RESW")
+                {
+                    // Si tmpcad no esta vacio, agregar a cad
+                    if (tmpcad != "")
+                    {
+                        cad += count.ToString("X").PadLeft(2, '0') + tmpcad;
+                        // Limpiar tmpcad
+                        tmpcad = "";
+                        // Agregar a tmpcad
+                        tmpcad += line.codobj;
+                        count = 0;
+                        Console.WriteLine("Cuenta rst 3: " + count);
+                    }
+                }
+
+                // Ver si genero codigo objeto sin errores
+                if (line.codobj != "")
+                {
+                    //Console.WriteLine(line.codobj);
+
+                    // Si tmpcad esta vacio, poner la dirección de inici
+                    if (tmpcad == "")
+                    {
+                        cad += "\nT";
+                        // a 6 caracteres desde la izquierda, si no, rellenar con ceros
+                        cad += line.cp.PadLeft(6, '0');
+                        count = 0;
+                        Console.WriteLine("Cuenta rst 1: " + count);
+                    }
+                    if (tmpcad.Length + line.codobj.Length <= 60)
+                    {
+                        tmpcad += line.codobj;
+                        // Sumar a count la longitud de codobj entre 2
+                        count += line.codobj.Length / 2;
+                        //count++;
+                        Console.WriteLine("Cuenta: " + count);
+                    }
+                    else
+                    {
+                        // Si tmpcad no esta vacio, agregar a cad
+                        cad += count.ToString("X").PadLeft(2, '0') + tmpcad;
+                        cad += "\nT";
+                        // a 6 caracteres desde la izquierda, si no, rellenar con ceros
+                        cad += line.cp.PadLeft(6, '0');
+
+                        // Limpiar tmpcad
+                        tmpcad = "";
+                        // Agregar a tmpcad
+                        tmpcad += line.codobj;
+                        count = 0;
+                        Console.WriteLine("Cuenta rst 2: " + count);
+                    }
+
+                }
+
+
+                // Si fue formatp 4 y no hubo errores, marcar como realocalizable con un * en codop
+                if (line.formato == "4" && line.error == "")
+                {
+                    line.codobj += "*";
+                }
+                Console.WriteLine("Instrucción: " + line.codobj);
+            }
+
+            // Recorrer lineas, para ver aquellas con *y agregarlas a cad como registro M
+            foreach (Line line in midData)
+            {
+                if (line.codobj.Contains("*"))
+                {
+                    // Poner M
+                    cad += "\nM";
+                    // Poner la dirección de inicio + 1
+                    cad += (int.Parse(line.cp, System.Globalization.NumberStyles.HexNumber) + 1).ToString("X").PadLeft(6, '0');
+                    // Poner 05
+                    cad += "05+" + start;
                 }
             }
 
+            // Registro E, Si tiene etiqueta, poner su valor segun tabla de simbolos
+            // Si no, buscar la primera instrucción (que no sea directiva) y poner su dirección
+            cad += "\nE";
+            Line last = midData.Last();
+            if (last.etiqueta != "")
+            {
+                var sym = symData.Find(item => item.Item1 == last.etiqueta);
+                if (sym != null)
+                {
+                    cad += sym.Item2.PadLeft(6, '0');
+                }
+            }
+            else
+            {
+                foreach (Line line in midData)
+                {
+                    if (line.etiqueta == "")
+                    {
+                        // Buscar la primera instrucción que no sea directiva
+                        if (!line.instruccion.Contains("RES") && !line.instruccion.Contains("BYTE") && !line.instruccion.Contains("WORD"))
+                        {
+                            cad += line.cp.PadLeft(6, '0');
+                            break;
+                        }
+                    }
+                }
+            }
+            //Console.WriteLine(cad);
+            this.objCode = cad;
+
             return;
         }
+
+
 
         public void createTables()
         {
