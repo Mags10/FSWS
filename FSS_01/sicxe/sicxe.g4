@@ -5,11 +5,12 @@ prog            :   inicio proposiciones fin EOF;
 inicio          :   etiqueta START NUM FINL
                 ;
 
-fin             :   END entrada
+START           :   'START';
+
+fin             :   END ID?
                 ;
 
-entrada         :   ID?
-                ;
+END			    :   'END';
 
 proposiciones   :   (proposicion FINL)+
                 ;
@@ -18,15 +19,27 @@ proposicion     :   directiva
                 |   instruccion
                 ;
 
-instruccion     :   (etiqueta opinstruccion) 
+
+directiva       :   etiqueta? (RESB | RESW) NUM
+                |   etiqueta? WORD (EXPR | NUM)
+                |   etiqueta? EQU (EXPR | CPREF)
+                |   etiqueta? BASE ID
+                |   etiqueta? BYTE (CONSTHEX | CONSTCAD)
+                |   USE ID?
+                ;
+
+instruccion     :   etiqueta opinstruccion
                 |   opinstruccion
                 ;
 
-directiva       :   etiqueta? tipodirectiva opdirectiva
-                |   etiqueta? BASE ID
-                ;
-
-tipodirectiva   :   BYTE | WORD | RESB | RESW;
+RESB            :   'RESB';
+RESW            :   'RESW';
+WORD            :   'WORD';
+BYTE            :   'BYTE';
+EQU             :   'EQU';
+BASE            :   'BASE';
+CPREF           :   '*';
+USE			    :   'USE'; 
 
 etiqueta        :   ID;
 
@@ -34,9 +47,25 @@ opinstruccion   :   formato;
 
 formato         :   f4 | f3 | f2 | f1 ;
 
-f4              :   '+' f3;
+f4              :   CODOPF4 (simple | indirecto | inmediato)
+                |   PLUS RSUB
+                ;
 
-f3              :   simple3 | indirecto3 | inmediato3 | 'RSUB';
+f3              :   CODOPF3 (simple | indirecto | inmediato)
+                |   RSUB
+                ;
+
+RSUB            :   'RSUB';
+
+simple          :   (NUM | ID | EXPR) (',' REG)?;
+
+indirecto       :   SIMIND (EXPR | NUM | ID);
+
+SIMIND          :   '@';
+
+inmediato       :   SIMINM (EXPR | NUM | ID);
+
+SIMINM          :   '#';
 
 f2              :   CODOPF2 (REG ',' (REG | NUM)) 
                 |   CODOPF2 REG
@@ -45,32 +74,13 @@ f2              :   CODOPF2 (REG ',' (REG | NUM))
 
 f1              :   CODOPF1;
 
-simple3         :   CODOPF3 (NUM | ID) (',' REG)?;
-
-indirecto3      :   CODOPF3 '@' (NUM | ID);
-
-inmediato3      :   CODOPF3 '#' (NUM | ID);
-
-opdirectiva     :   NUM | CONSTHEX | CONSTCAD;
-
-END             :   'END';
-
-BASE            :   'BASE';
-
-BYTE            :   'BYTE';
-
-WORD            :   'WORD';
-
-RESB            :   'RESB';
-
-RESW            :   'RESW';
-
-START           :   'START';
-
 CODOPF1         :   'FIX' | 'FLOAT' | 'HIO' | 'NORM' | 'SIO' | 'TIO';
 
 CODOPF2         :   'ADDR' | 'CLEAR' | 'COMPR' | 'DIVR' | 'MULR' | 'RMO' 
                 |   'SHIFTL' | 'SHIFTR' | 'SVC' | 'TIXR' | 'SUBR' 
+                ;
+                
+CODOPF4         :   PLUS CODOPF3
                 ;
 
 CODOPF3         :   'ADD' | 'ADDF' | 'AND' | 'COMP' | 'COMPF' | 'DIV' 
@@ -82,16 +92,43 @@ CODOPF3         :   'ADD' | 'ADDF' | 'AND' | 'COMP' | 'COMPF' | 'DIV'
                 |   'TIX' | 'WD'
                 ;
 
-REG             : 'A' | 'X' | 'L' | 'B' | 'S' | 'T' | 'F' | 'SW';  // Define todos los registros aquís
+
+REG             : 'A' | 'X' | 'L' | 'B' | 'S' | 'T' | 'F' | 'SW'; 
 
 NUM             : [0-9]+ ('H' | 'h')?;
 
+
+CONSTHEX        : 'X' APOS [0-9A-F]+ APOS;
+
+CONSTCAD        : 'C' APOS [a-zA-Z0-9]* APOS;
+
+APOS            : '\'';   
+
+
 ID              : [a-zA-Z_][a-zA-Z_0-9]*;
+
+EXPR            : TERM EXPR2
+                ;
+
+EXPR2           : ('+' TERM | '-' TERM) EXPR2?
+                | 
+                ; 
+
+TERM            : FACTOR TERM2
+                ;
+
+TERM2           : ('*' FACTOR | '/' FACTOR) TERM2?
+                | 
+                ; 
+
+FACTOR          : NUM
+                | ID 
+                | '(' TERM ')'
+                ;
+
+PLUS			: '+';  
 
 FINL            : ('\r'? '\n')+;
 
-CONSTHEX        : 'X''\'' [0-9A-F]+ '\'';
 
-CONSTCAD        : 'C''\'' [a-zA-Z0-9]* '\'';
-
-WS              : [ \t]+ -> skip; // Evitar problemas con saltos de línea
+WS              : [ \t]+ -> skip;

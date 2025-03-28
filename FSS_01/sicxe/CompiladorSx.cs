@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Antlr4.Runtime.Tree;
 
 namespace FSS_01
 {
@@ -34,19 +35,18 @@ namespace FSS_01
         public Table midFile;
         public Table symTable;
         // Datos en lista de listas del tipo ["NUM", "FORMATO", "CP", "ETQ", "INS", "OPER", "CODOBJ", "ERROR", "MODO"]
-        //private List<List<string>> midData = new List<List<string>>();
-        private List<Line> midData = new List<Line>();
-        private List<Tuple<string,string>> symData = new List<Tuple<string,string>>();
+
         // Relación de instrucciones y su código de operación
         private List<Tuple<string,int>> opers = new List<Tuple<string, int>>();
         // Relación de registros y su código de operación
         private List<Tuple<string, int>> regs = new List<Tuple<string, int>>();
-        // Codigo objeto
-        private string objCode = "";
+        // Lista de directivas
+        private List<string> directivas = new List<string>();
         // Path de archivo
         private string path;
-        // Cuadro de texto para mostrar el objcode
-        public RichTextBox objTextBox = new RichTextBox();
+
+        // Tabla de símbolos
+        private List<Simbolo> simbolos = new List<Simbolo>();
 
         public CompiladorSx(string path)
         {
@@ -60,6 +60,8 @@ namespace FSS_01
                 opers.Add(new Tuple<string, int>(instr.Key, int.Parse(instr.Value, System.Globalization.NumberStyles.HexNumber)));
             foreach (var reg in registros)
                 regs.Add(new Tuple<string, int>(reg.Key, int.Parse(reg.Value, System.Globalization.NumberStyles.HexNumber)));
+            // Cargar las directivas
+            directivas = jsonObject["directivas"].ToObject<List<string>>();
         }
 
         public void loadCode(string path)
@@ -83,14 +85,14 @@ namespace FSS_01
             // Crear lista de reglas
             ruleList.Clear();
             foreach (var rule in lexr.RuleNames)
-            {
                 ruleList.Add(new Tuple<string, int>(rule, (int)lexr.GetType().GetField(rule).GetValue(lexr)));
-            }
-
             // Crear un objeto de la clase CommonTokenStream
             tokens = new CommonTokenStream(lexer);
             // Crear un objeto de la clase AsmParser
             parser = new sicxeParser(tokens);
+            //parser.Trace = true;
+            //parser.TrimParseTree = true;
+
             // Agregar los oyentes de errores
             parslistener = new ErrorParserListener();
             lexelistener = new ErrorLexerListener();
@@ -98,29 +100,284 @@ namespace FSS_01
             lexer.AddErrorListener(lexelistener);
             parser.RemoveErrorListeners();
             parser.AddErrorListener(parslistener);
-            alreadyCompiled = false;
-            pstCmpAnlz = false;
         }
 
         public void compile()
         {
             tree = parser.prog();
-            //midFile = new Table("Archivo intermedio");
-            //symTable = new Table("Tabla de símbolos");
-            postCompileAnalizer();
-            generateObjectCode();
-            // Exportar obj a mismo directorio del archivo
-            string objPath = path.Replace(".asm", ".obj");
-            System.IO.File.WriteAllText(objPath, objCode);
-            objTextBox.Text = objCode;
 
-            // Configurar objeTextBox para que use todo el espacio del control
-            objTextBox.Dock = DockStyle.Fill;
+            int progCP = 0;
+            int numLine = 1;
+            // Crear lineas de código
+            List<Linea> lineas = new List<Linea>();
+            Linea tmpLine = new Linea();
 
-            createTables();
+            //tree.inicio().etiqueta();
+            tmpLine.etq = tree.inicio().etiqueta();
+            tmpLine.ins = tree.inicio().START();
+            tmpLine.opers = new List<ITerminalNode> { tree.inicio().NUM() };
+            tmpLine.line = numLine++;
+            checkError();
+            lineas.Add(tmpLine);
+
+            var tmp = tree.proposiciones();
+            var tmp2 = tmp.proposicion();
+            Console.WriteLine("Preposiciones: " + tmp2.Length);
+            foreach (var prop in tmp2)
+            {
+                tmpLine = new Linea();
+                tmpLine.cp = progCP;
+                tmpLine.line = numLine++;
+                tmpLine.opers = new List<ITerminalNode>();
+                tmpLine.indexado = false;
+                checkError();
+
+                if (prop.directiva() != null)
+                {
+                    var lineaDirect = prop.directiva();
+                    tmpLine.etq = lineaDirect.etiqueta() != null ? lineaDirect.etiqueta() : null;
+
+                    var num = lineaDirect.NUM();
+                    var expr = lineaDirect.EXPR();
+                    var id = lineaDirect.ID();
+                    var consChar = lineaDirect.CONSTCAD();
+                    var consHex = lineaDirect.CONSTHEX();
+                    var cpref = lineaDirect.CPREF();
+                    if (lineaDirect.RESB() != null)
+                    {
+                        tmpLine.ins = lineaDirect.RESB();
+                        tmpLine.opers.Add(num);
+                        tmpLine.formato = toInt(num.GetText());
+                        if (tmpLine.etq != null)
+                            addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL"); 
+                    }
+                    else if (lineaDirect.RESW() != null)
+                    {
+                        tmpLine.ins = lineaDirect.RESW();
+                        tmpLine.opers.Add(num);
+                        tmpLine.formato = toInt(num.GetText()) * 3;
+                        if (tmpLine.etq != null)
+                            addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
+                    }
+                    else if (lineaDirect.WORD() != null)
+                    {
+                        tmpLine.ins = lineaDirect.WORD();
+                        tmpLine.opers.Add((num != null) ? num : expr);
+                        tmpLine.formato = 3;
+                        if (tmpLine.etq != null)
+                            addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
+                    }
+                    else if (lineaDirect.BYTE() != null)
+                    {
+                        tmpLine.ins = lineaDirect.BYTE();
+                        tmpLine.opers.Add((consChar != null) ? consChar : consHex);
+                        if (consChar != null) tmpLine.formato = toBytes(consChar.GetText());
+                        if (consHex != null) tmpLine.formato = toBytes(consHex.GetText());
+                        if (tmpLine.etq != null)
+                            addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
+                    }
+                    else if (lineaDirect.BASE() != null)
+                    {
+                        tmpLine.ins = lineaDirect.BASE();
+                        tmpLine.opers.Add(id);
+                        if (tmpLine.etq != null)
+                            addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
+                    }
+                    else if (lineaDirect.EQU() != null)
+                    {
+                        tmpLine.ins = lineaDirect.EQU();
+                        tmpLine.opers.Add((expr != null) ? expr : cpref);
+                        if (tmpLine.etq != null){
+                            if (expr == null)
+                                addToSymTable(tmpLine.etq.GetText(), expr.GetText(), "ABS");
+                            else
+                                addToSymTable(tmpLine.etq.GetText(), cpref.GetText(), "PEN");
+                        }
+                    }
+                    else if (lineaDirect.USE() != null)
+                    {
+                        tmpLine.ins = lineaDirect.USE();
+                        tmpLine.opers.Add(id);
+                    }
+                }
+                else if (prop.instruccion() != null)
+                {
+                    var lineaInstr = prop.instruccion();
+                    tmpLine.etq = lineaInstr.etiqueta() != null ? lineaInstr.etiqueta() : null;
+
+                    if (lineaInstr.opinstruccion() != null)
+                    {
+                        var instruccion = lineaInstr.opinstruccion().formato();
+
+                        if (instruccion.f1() != null)
+                        {
+                            tmpLine.ins = instruccion.f1().CODOPF1();
+                            tmpLine.formato = 1;
+                        }
+                        else if (instruccion.f2() != null)
+                        {
+                            tmpLine.ins = instruccion.f2().CODOPF2();
+                            tmpLine.formato = 2;
+
+                            var f2regs = instruccion.f2().REG();
+                            var f2num = instruccion.f2().NUM();
+                            if (f2regs.Length > 0) tmpLine.opers.Add(f2regs[0]);
+                            if (f2regs.Length > 1) tmpLine.opers.Add(f2regs[1]);
+                            if (f2num != null) tmpLine.opers.Add(f2num);
+                        }
+                        else if (instruccion.f3() != null || instruccion.f4() != null)
+                        {
+                            int format = (instruccion.f3() != null) ? 3 : 4;
+                            tmpLine.formato = format;
+                            Object f3Line = (format == 3) ? (Object)instruccion.f3() : (Object)instruccion.f4();
+                            var f3Oper = (format == 3) ? ((sicxeParser.F3Context)f3Line).CODOPF3() : ((sicxeParser.F4Context)f3Line).CODOPF4();
+                            if (f3Oper != null)
+                            {
+                                tmpLine.ins = f3Oper;
+                                var simpleLine = (format == 3) ? ((sicxeParser.F3Context)f3Line).simple() : ((sicxeParser.F4Context)f3Line).simple();
+                                var indircLine = (format == 3) ? ((sicxeParser.F3Context)f3Line).indirecto() : ((sicxeParser.F4Context)f3Line).indirecto();
+                                var inmedLine = (format == 3) ? ((sicxeParser.F3Context)f3Line).inmediato() : ((sicxeParser.F4Context)f3Line).inmediato();
+                                if (simpleLine != null)
+                                {
+                                    tmpLine.modo = "Simple";
+                                    if (simpleLine.NUM() != null) tmpLine.opers.Add(simpleLine.NUM());
+                                    if (simpleLine.ID() != null) tmpLine.opers.Add(simpleLine.ID());
+                                    if (simpleLine.EXPR() != null) tmpLine.opers.Add(simpleLine.EXPR());
+                                    if (simpleLine.REG() != null)
+                                    {
+                                        tmpLine.opers.Add(simpleLine.REG());
+                                        tmpLine.indexado = simpleLine.REG().GetText().Contains("X");
+                                    }
+                                }
+                                else if (indircLine != null)
+                                {
+                                    tmpLine.modo = "Indirecto";
+                                    if (indircLine.NUM() != null) tmpLine.opers.Add(indircLine.NUM());
+                                    if (indircLine.ID() != null) tmpLine.opers.Add(indircLine.ID());
+                                    if (indircLine.EXPR() != null) tmpLine.opers.Add(indircLine.EXPR());
+                                }
+                                else if (inmedLine != null)
+                                {
+                                    tmpLine.modo = "Inmediato";
+                                    if (inmedLine.NUM() != null) tmpLine.opers.Add(inmedLine.NUM());
+                                    if (inmedLine.ID() != null) tmpLine.opers.Add(inmedLine.ID());
+                                    if (inmedLine.EXPR() != null) tmpLine.opers.Add(inmedLine.EXPR());
+                                }
+                            }
+                            else
+                            {
+                                tmpLine.modo = "Simple";
+                                tmpLine.ins = null;
+                            }
+                        }
+                    }
+                    // Añadir a la tabla de símbolos si es que hay etiqueta
+                    if (tmpLine.etq != null)
+                        addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
+                }
+                // Calcular CP solo si no hay errores sintacticos, si es de simbolo duplicado, sumarlo igul
+                // if (tmpLine.error == null) progCP += tmpLine.formato;
+                if (tmpLine.error == "Símbolo duplicado" || tmpLine.error == null) progCP += tmpLine.formato;
+                lineas.Add(tmpLine);
+            }
+            
+            tmpLine = new Linea();
+            tmpLine.cp = progCP;
+            tmpLine.ins = tree.fin().END();
+            tmpLine.opers = new List<ITerminalNode> { };
+            tmpLine.line = numLine++;
+            if (tree.fin().ID() != null) tmpLine.opers.Add(tree.fin().ID());
+            checkError();
+            lineas.Add(tmpLine);
+
+            Console.WriteLine("=====================================");
+
+            // Imprimir lineas
+            foreach (var line in lineas)
+            {
+                Console.WriteLine("Línea: " + line.line);
+                Console.WriteLine("CP: " + line.cp);
+                if (line.etq != null)
+                    Console.WriteLine("Etiqueta: " + line.etq.GetText());
+                if (line.ins != null)
+                    Console.WriteLine("Instrucción: " + line.ins.GetText());
+                else
+                    Console.WriteLine("Instrucción: RSUB");
+                foreach (var oper in line.opers)
+                    {
+                    if (oper != null)
+                        Console.WriteLine("Operando: " + oper.GetText());
+                    }
+                Console.WriteLine("Formato: " + line.formato);
+                Console.WriteLine("Indexado: " + line.indexado);
+                if (line.modo != null)
+                    Console.WriteLine("Modo: " + line.modo);
+                Console.WriteLine("=====================================");
+            }
+
+            // Crear tabla de codigo en midTable
+            midFile = new Table("Tabla Intermedia");
+            midFile.dataGridView.Columns.Add("Linea", "Linea");
+            midFile.dataGridView.Columns.Add("Formato", "For/Tam");
+            midFile.dataGridView.Columns.Add("CP", "CP");
+            midFile.dataGridView.Columns.Add("Etiqueta", "Etiqueta");
+            midFile.dataGridView.Columns.Add("Instrucción", "Instrucción");
+            midFile.dataGridView.Columns.Add("Operando", "Operando");
+            midFile.dataGridView.Columns.Add("Código Objeto", "Código Objeto");
+            midFile.dataGridView.Columns.Add("Error", "Error");
+            midFile.dataGridView.Columns.Add("Modo", "Modo");
+            foreach (var line in lineas)
+            {
+                var index = midFile.dataGridView.Rows.Add();
+                midFile.dataGridView.Rows[index].Cells[0].Value = line.line;
+                midFile.dataGridView.Rows[index].Cells[1].Value = line.formato;
+                // Pasar a hexadecimal
+                midFile.dataGridView.Rows[index].Cells[2].Value = line.cp.ToString("X");
+                midFile.dataGridView.Rows[index].Cells[3].Value = (line.etq != null) ? line.etq.GetText() : "";
+                midFile.dataGridView.Rows[index].Cells[4].Value = (line.ins != null) ? line.ins.GetText() : "RSUB";
+                string oper = "";
+                // Ver el tipo de operando
+                if(line.modo == "Inmediato")
+                    oper += "#";
+                else if (line.modo == "Indirecto")
+                    oper += "@";
+                foreach (var op in line.opers)
+                {
+                    if (op != null)
+                        oper += op.GetText() + ", ";
+                }
+                oper = oper.TrimEnd(' ').TrimEnd(',');
+                midFile.dataGridView.Rows[index].Cells[5].Value = oper;
+                midFile.dataGridView.Rows[index].Cells[6].Value = line.codobj;
+                midFile.dataGridView.Rows[index].Cells[7].Value = line.error;
+                midFile.dataGridView.Rows[index].Cells[8].Value = line.modo;
+            }
+
+            // Tabla de símbolos
+            symTable = new Table("Tabla de Símbolos");
+            symTable.dataGridView.Columns.Add("Nombre", "Nombre");
+            symTable.dataGridView.Columns.Add("Valor", "Valor");
+            symTable.dataGridView.Columns.Add("Expresión", "Expresión");
+            symTable.dataGridView.Columns.Add("Tipo", "Tipo");
+            foreach (var sim in simbolos)
+            {
+                var index = symTable.dataGridView.Rows.Add();
+                symTable.dataGridView.Rows[index].Cells[0].Value = sim.nombre;
+                symTable.dataGridView.Rows[index].Cells[1].Value = sim.valor;
+                // En hexadecimal
+                symTable.dataGridView.Rows[index].Cells[2].Value = int.Parse(sim.expresion).ToString("X");
+                symTable.dataGridView.Rows[index].Cells[3].Value = sim.tipo;
+            }
+
+
+            // Autoajustar columnas al contenido
+            midFile.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+            midFile.dataGridView.AutoResizeColumns();
+            midFile.dataGridView.AutoResizeRows();
+            midFile.dataGridView.Refresh();
+
             alreadyCompiled = true;
             date = DateTime.Now;
-
             // Imprimir todos los errores
             Console.WriteLine("Errores léxicos: " + lexelistener.getErroresCount());
             Console.WriteLine(lexelistener.getErrores());
@@ -129,689 +386,67 @@ namespace FSS_01
 
             // Imprimir árbol de análisis sintáctico
             Console.WriteLine(tree.ToStringTree(parser));
-        }
 
-        private bool pstCmpAnlz = false;
-        private void postCompileAnalizer()
-        {
-            var temp = this.tokens.GetTokens();
-            string[] direcs = { "START", "END", "BASE", "BYTE", "WORD", "RESB", "RESW", "+", "RSUB" };
-            int programCounter = 0;
-            List<Tuple<string, int>> tabsym = new List<Tuple<string, int>>();
-            Tuple<string, int> tup = null;
-            for (int i = 0; i < temp.Count; i++)
+
+            // Funcion interna para que, de una cadena, se transforme a un entero
+            int toInt(string s)
             {
-                List<IToken> tokens = new List<IToken>();
-                string line = temp[i].Line.ToString();
-                //Console.WriteLine("Linea: " + line);
-                while (i < temp.Count && line == temp[i].Line.ToString())
+                // Revisar si tiene h o H, si es así transformar a entero
+                if (s.Contains("h") || s.Contains("H"))
                 {
-                    //Console.WriteLine(temp[i].Text);
-                    tokens.Add(temp[i]);
-                    i++;
+                    return Convert.ToInt32(s.Substring(0, s.Length - 1), 16);
                 }
-                i--;
-                string formato = "-";
-                string cp = programCounter.ToString("X");
-                string etq = "";
-                string ins = "";
-                string opers = "";
-                string modo = "";
-                string errortop = "";
-                bool errors = false;
-                string error = "";
-                int j = 0;
-                string tmptype = this.getTokenType(tokens[j].Type);
-                if (tmptype == "ID" || tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text))
+                // Fue un número normal
+                return Convert.ToInt32(s);
+            }
+
+            // Función interna para que, de una cadena, con X'...' o C'...', se transforme a el tamaño en bytes
+            int toBytes(string s)
+            {
+                // Revisar si es X o C
+                if (s.Contains("X") || s.Contains("x"))
                 {
-                    if (tmptype == "ID")
-                    {
-                        tup = new Tuple<string, int>(tokens[j].Text, programCounter);
-                        // Revisar si el nombre de la etiqueta ya existe
-                        foreach (var t in tabsym)
-                        {
-                            if (t.Item1 == tup.Item1)
-                            {
-                                //Console.WriteLine("Error: Etiqueta ya existe");
-                                errortop = "Error: Símbolo duplicado";
-                                errors = true;
-                                break;
-                            }
-                        }
-                        etq = tokens[j].Text;
-                        j++;
-                    }
-                    if (j < tokens.Count)
-                    {
-                        tmptype = this.getTokenType(tokens[j].Type);
-                        while (tmptype != null && (tmptype.Contains("CODOP") || direcs.Contains(tokens[j].Text)))
-                        {
-                            if (formato == "-")
-                                // Revisar si no es RSUB
-                                if (tokens[j].Text == "RSUB") formato = "3";
-                                else
-                                    switch (tmptype)
-                                    {
-                                        case string s when s.Contains("1"):
-                                            formato = "1";
-                                            break;
-                                        case string s when s.Contains("2"):
-                                            formato = "2";
-                                            break;
-                                        case string s when s.Contains("3") || s == "RSUB":
-                                            formato = "3";
-                                            break;
-                                        default:
-                                            if (tokens[j].Text == "+") formato = "4";
-                                            break;
-                                    }
-                            ins += tokens[j].Text;
-                            j++;
-                            tmptype = this.getTokenType(tokens[j].Type);
-                        }
-                    }
-                    // Guardar el restante en opers
-                    for (int k = j; k < tokens.Count; k++) opers += tokens[k].Text + " ";
+                    // Redondear hacia arriba
+                    return (s.Length - 3 + 1) / 2;
                 }
-                modo = "-";
-                if (formato == "3" || formato == "4")
+                else if (s.Contains("C") || s.Contains("c"))
                 {
-                    Console.WriteLine("Opers: " + opers);
-                    if (opers.Contains("#")) modo = "Inmediato";
-                    else if (opers.Contains("@")) modo = "Indirecto";
-                    else modo = "Simple";
-                    Console.WriteLine("Modo: " + modo);
+                    return s.Length - 3;
                 }
-                //.WriteLine("Linea: " + line);
-                string errlex = this.lexelistener.getErrorByLine(int.Parse(line));
-                string errparse = this.parslistener.getErrorByLine(int.Parse(line));
-                //Console.WriteLine("Error lexico: " + errlex);
-                //Console.WriteLine("Error sintactico: " + errparse);
-                if (errlex != null)
+                return -1;
+            }
+
+            bool checkError()
+            {
+                // Si ya hay errores, no hacer nada
+                if (tmpLine.error != null) return true;
+                Console.WriteLine("Errores en línea: " + tmpLine.line);
+                Console.WriteLine(parslistener.getErrorByLine(tmpLine.line));
+                if (parslistener.getErrorByLine(tmpLine.line) != null)
                 {
-                    error = "Error: Sintaxis";
-                    errors = true;
+                    if (parslistener.getErrorByLine(tmpLine.line).Contains("expecting"))
+                        tmpLine.error = "Error de sintaxis";
+                    else if (parslistener.getErrorByLine(tmpLine.line).Contains("no viable"))
+                        tmpLine.error = "Instrucción no existe";
+                    return true;
                 }
-                else if (errparse != null)
-                {
-                    if (errparse.Contains("alternative")) error = "Error: Instrucción no existe";
-                    else error = "Error: Sintaxis";
-                    errors = true;
-                }
+                return false;
+            }
+
+            void addToSymTable(string etq, string value, string type)
+            {
+                // Si ya hay errores, no hacer nada
+                if (tmpLine.error != null) return;
+                Simbolo sim = new Simbolo();
+                sim.nombre = etq;
+                sim.expresion = value;
+                sim.tipo = type;
+                // Verificar si no existe
+                if (simbolos.FindIndex(x => x.nombre == etq) == -1)
+                    simbolos.Add(sim);
                 else
-                {
-                    // formato a int, si es - es 0
-                    programCounter += (formato == "-") ? 0 : int.Parse(formato);
-
-                    // Revisar si la operación es una directiva
-                    if (formato == "-" && direcs.Contains(ins))
-                    {
-                        switch (ins)
-                        {
-                            case "START":
-                                break;
-                            case "END":
-                                break;
-                            case "BASE":
-                                break;
-                            case "BYTE":
-                                // programCounter += 1;
-                                // Si contiene una "C'" o "c'" contar el numero de caracteres, cada uno necesita un byte (Ejemplo: C'HELLO' = 5 bytes)
-                                // Si contiene una "X'" o "x'" contar el numero de nibles, cada dos nibles necesitan un byte´(Ejemplo: X'F1' = 1 byte)
-                                if (opers.Contains("C'") || opers.Contains("c'"))
-                                {
-                                    var val = opers.Replace("C'", "").Replace("c'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                                    Console.WriteLine(val + " " + val.Length);
-                                    programCounter += val.Length;
-                                }
-                                else
-                                {
-                                    var val = opers.Replace("X'", "").Replace("x'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                                    Console.WriteLine(val + " " + val.Length);
-                                    programCounter += (val.Length % 2 == 0) ? val.Length / 2 : (val.Length / 2) + 1;
-                                }
-                                break;
-                            case "WORD":
-                                // Una palabra son 3 bytes
-                                programCounter += 3;
-                                break;
-                            case "RESB":
-                                //programCounter += int.Parse(opers);
-                                // Si hay una h o H, tratar como hexadecimal, si no como decimal
-                                if (opers.Contains("H") || opers.Contains("h"))
-                                    programCounter += int.Parse(opers.Replace("H", "").Replace("h", ""), System.Globalization.NumberStyles.HexNumber);
-                                else
-                                    programCounter += int.Parse(opers);
-                                break;
-                            case "RESW":
-                                // programCounter += int.Parse(opers) * 3;
-                                // Si hay una h o H, tratar como hexadecimal, si no como decimal
-                                if (opers.Contains("H") || opers.Contains("h"))
-                                    programCounter += int.Parse(opers.Replace("H", "").Replace("h", ""), System.Globalization.NumberStyles.HexNumber) * 3;
-                                else                                
-                                    programCounter += int.Parse(opers) * 3;
-                                break;
-                        }
-                    }
-                }
-                //Console.WriteLine("===============================");
-                if (errortop != "") error = errortop;
-                // Cp formateado a 4
-                String cpFormat = cp.PadLeft(4, '0');
-                if (!errors) {
-                    if (tup != null && ins != "START" && ins != "END") tabsym.Add(tup);
-                }
-                //else modo = "";
-                //List<string> row = new List<string> { line, formato, cpFormat, etq, ins, opers, "", error, modo };
-                Line tmpline = new Line(line, formato, cpFormat, etq, ins, opers, "", error, modo);
-                Console.WriteLine("Modo registrado: " + tmpline.modo);
-                Console.WriteLine("=====================================");
-                midData.Add(tmpline);
-                tup = null;
+                    tmpLine.error = "Símbolo duplicado";
             }
-
-            foreach (var t in tabsym)
-            {
-                String cpFormat = t.Item2.ToString("X").PadLeft(4, '0');
-                symData.Add(new Tuple<string, string>(t.Item1, cpFormat));
-            }
-
-            pstCmpAnlz = true;
-
-            
-        }
-
-        private void generateObjectCode()
-        {
-            string cad = "H";
-            // Etiqueta de start
-            string start = "";
-            // buscar la etiqueta de start
-            foreach (Line line in midData)
-            {
-                if (line.instruccion == "START")
-                {
-                    start = line.etiqueta;
-                    break;
-                }
-            }
-            Console.WriteLine("Generando código objeto para: " + start);
-            // concatenar la etiqueta de start a 6 caracteres desde la izquierda, si no, rellenar con espacios
-            cad += start.PadRight(6, ' ');
-
-            // Poner la dirección de inicio en 6 caracteres desde la izquierda, si no, rellenar con ceros
-            cad += midData[0].cp.PadLeft(6, '0');
-
-            // Poner la dirección final en 6 caracteres desde la izquierda, si no, rellenar con ceros
-            cad += midData[midData.Count - 1].cp.PadLeft(6, '0');
-
-            Console.WriteLine(cad);
-
-            string tmpcad = "";
-            int count = 0;
-
-            if (!pstCmpAnlz) return;
-
-            int baseAddress = -1;
-
-            foreach (Line line in midData)
-            {
-                // Buscar en la lista de operaciones la instrucción
-                var oper = opers.Find(x => x.Item1 == line.instruccion.Replace("+", ""));
-                if (oper != null)
-                {
-                    String codop = oper.Item2.ToString("X");
-                    string error = "";
-                    // Si es formato 1 queda igual
-                    if (line.formato == "1")
-                    {
-                        line.codobj = codop;
-                    }
-                    // Si fue formato dos
-                    else if (line.formato == "2")
-                    {
-                        string reg1 = "0";
-                        string reg2 = "0";
-                        // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
-                        line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
-                        if (!line.operadores.Contains(","))
-                        {
-                            var reg = regs.Find(x => x.Item1 == line.operadores);
-                            if (reg != null) reg1 = reg.Item2.ToString("X");
-                        }
-                        else
-                        {
-                            var tmpregs = line.operadores.Split(',');
-                            var reg = regs.Find(x => x.Item1 == tmpregs[0]);
-                            if (reg != null) reg1 = reg.Item2.ToString("X");
-                            reg = regs.Find(x => x.Item1 == tmpregs[1]);
-                            if (reg != null) reg2 = reg.Item2.ToString("X");
-                        }
-                        line.codobj = codop + reg1 + reg2;
-                    }
-                    else if (line.formato == "3" || line.formato == "4")
-                    {
-                        //Console.WriteLine("Instrucción: " + line.instruccion);
-                        // Pasar codop a binario
-                        string bin = Convert.ToString(oper.Item2, 2);
-                        //Console.WriteLine(bin);
-                        // Poner a 8 bits
-                        bin = bin.PadLeft(8, '0');
-                        //Console.WriteLine(bin);
-                        // Quitar ultimos 2 bits (LSB)
-                        bin = bin.Substring(0, bin.Length - 2);
-                        //Console.WriteLine(bin);
-                        if (line.instruccion == "RSUB")
-                        {
-                            line.codobj = "4C0000";
-                        }
-                        else
-                        {
-                            String n = "0";
-                            String i = "0";
-                            String x = "0";
-                            String b = "0";
-                            String p = "0";
-                            String e = "0";
-                            //Console.WriteLine("Modo: " + line.modo);
-                            // Si es inmediato
-                            if (line.modo == "Inmediato")
-                            {
-                                //Console.WriteLine("Inmediato");
-                                i = "1";
-                                n = "0";
-                            }
-                            // Si es indirecto
-                            else if (line.modo == "Indirecto")
-                            {
-                               // Console.WriteLine("Indirecto");
-                                i = "0";
-                                n = "1";
-                            }
-                            // Si es simple
-                            else
-                            {
-                                //Console.WriteLine("Simple");
-                                i = "1";
-                                n = "1";
-                            }
-                            // Si es extendido
-                            if (line.formato == "4")
-                            {
-                                //Console.WriteLine("Extendido");
-                                e = "1";
-                                // Si es RSUB
-                                if (line.instruccion == "RSUB")
-                                {
-                                    line.codobj = "4C000000";
-                                    continue;
-                                }
-                            }
-                            // Si es indexado
-                            if (line.operadores.Contains("X"))
-                            {
-                                //Console.WriteLine("Indexado");
-                                x = "1";
-                            }
-
-                            int dir = 0;
-                            string desp = "";
-
-                            // Obtener operando
-                            string operando = line.operadores;
-                            if (operando.Contains(","))
-                            {
-                                operando = operando.Split(',')[0];
-                            }
-                            // Limpiar operando
-                            operando = operando.Replace("\n", "").Replace("\t", "").Replace(" ", "");
-                            operando = operando.Replace("#", "").Replace("@", "");
-
-                            bool isetiqueta = false;
-                            // Si contiene una h o H, remplazar por nada
-                            if (operando.Contains("H") || operando.Contains("h"))
-                            {
-                                // revisar si quitando la h, contiene letras
-                                if (operando.Replace("H", "").Replace("h", "").Any(char.IsLetter)) isetiqueta = true;
-                                else 
-                                {
-                                    operando = operando.Replace("H", "").Replace("h", "");
-                                    // convertir a int
-                                    dir = int.Parse(operando, System.Globalization.NumberStyles.HexNumber);
-                                }
-                            }
-                            else
-                            {
-                                // Si contiene letras, es una etiqueta
-                                if (operando.Any(char.IsLetter)) isetiqueta = true;
-                                else
-                                {// Si no, convertir a int
-                                    dir = int.Parse(operando);
-                                }   
-                            }
-                            if (isetiqueta)
-                            {
-                                // Buscar en la tabla de símbolos
-                                var sym = symData.Find(item => item.Item1 == operando);
-                                if (sym != null)
-                                {
-                                    dir = int.Parse(sym.Item2, System.Globalization.NumberStyles.HexNumber);
-                                }
-                                else
-                                {
-                                    //Console.WriteLine("Error: Etiqueta no encontrada");
-                                    error = "Error: Etiqueta no encontrada";
-                                }
-                            }
-
-                            if (line.formato == "3")
-                            {
-                              //  Console.WriteLine("Operandos: " + operando);
-                              //  Console.WriteLine("Direccion: " + dir);
-                                // Con la dirección, calcular si es relativa a PC o Base
-                                // Se revisa con el CP de la siguiente instrucción
-                                // Obtener indice actual
-                                int index = midData.FindIndex(item => item.cp == line.cp);
-                                //cp de la siguiente instrucción
-                                int nextcp = int.Parse(midData[index + 1].cp, System.Globalization.NumberStyles.HexNumber);
-                                // Calcular la dirección relativa
-                                int rel = dir - nextcp;
-                                //Console.WriteLine("Relativa: " + rel);
-
-                                // Ahora calcular respecto a la base
-                                int baseDir = dir - baseAddress;
-                               // Console.WriteLine("Base: " + baseDir);
-
-                                // Si no es etiqueta y es inmediato
-                               // Console.WriteLine("Etiqueta: " + isetiqueta);
-                               // Console.WriteLine("modo: " + line.modo);
-                                if (!isetiqueta)
-                                {
-                                  //  Console.WriteLine("Inmediato");
-                                    p = "0";
-                                    b = "0";
-                                    // Pasar a binario
-                                    desp = Convert.ToString(dir, 2);
-                                }
-                                // Esta dentro del rango -2048 a 2047
-                                else if (-2048 <= rel && rel <= 2047)
-                                {
-                                  //  Console.WriteLine("Relativo a PC");
-                                    p = "1";
-                                    b = "0";
-                                    // Pasar a binario
-                                    desp = Convert.ToString(rel, 2);
-                                }
-                                // Esta dentro del rango de la base
-                                else if (0 <= baseDir && baseDir <= 4095)
-                                {
-                                   // Console.WriteLine("Relativo a Base");
-                                    p = "0";
-                                    b = "1";
-                                    // Pasar a binario
-                                    desp = Convert.ToString(baseDir, 2);
-                                }
-                                // Si no, error
-                                else
-                                {
-                                    //Console.WriteLine("Error: No relativo al CP/B");
-                                    error = "Error: No relativo al CP/B";
-                                }
-                            }
-                            else
-                            {
-                                //Console.WriteLine("Operandos (f4): " + dir);
-                                // Pasar a binario
-                                desp = Convert.ToString(dir, 2);
-                                // Revisar si es simple e indexada, si lo es, es error
-                                if (x == "1" && n == "1")
-                                {
-                                    //Console.WriteLine("Error: No existe combinación de MD");
-                                    error = "Error: No existe combinación de MD";
-                                }
-                            }
-
-                            // Dependiendo del formato, tomar los ultimos 12 bits o 20 bits
-                            desp = desp.PadLeft(20, '0');
-                            if (line.formato == "3")
-                            {
-                                // Tomar los ultimos 12 bits (LSB)
-                                desp = desp.Substring(desp.Length - 12);
-                            }
-                            else if (line.formato == "4")
-                            {
-                                // Tomar los ultimos 20 bits (LSB)
-                                desp = desp.Substring(desp.Length - 20);
-                            }
-
-                            if (error != "")
-                            {
-                                line.error = error;
-                                b = "1";
-                                p = "1";
-                                // desp remplazar todos los bits por 1
-                                for (int k = 0; k < desp.Length; k++)
-                                {
-                                    desp = desp.Remove(k, 1).Insert(k, "1");
-                                }
-                            }
-
-                            line.codobj = bin + n + i + x + b + p + e + desp;
-                           // Console.WriteLine(line.codobj);
-                            // Pasar a hex de 4 en 4 para no perder ceros
-                            string hex = "";
-                            for (int ij = 0; ij < line.codobj.Length; ij += 4)
-                            {
-                                hex += Convert.ToInt32(line.codobj.Substring(ij, 4), 2).ToString("X");
-                            }
-                            line.codobj = hex;
-
-                            //Console.WriteLine(line.codobj);
-                            //Console.WriteLine("=====================================");
-
-                        }
-                    }
-                }
-                else
-                {
-                    if (line.instruccion.Contains("BASE"))
-                    {
-                        //Console.WriteLine("BASE");
-                        // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
-                        line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
-                        // Buscar en la tabla de símbolos
-                        var sym = symData.Find(item => item.Item1 == line.operadores);
-                        if (sym != null)
-                        {
-                            baseAddress = int.Parse(sym.Item2, System.Globalization.NumberStyles.HexNumber);
-                        }
-                        //Console.WriteLine("Base: " + baseAddress);
-                        //Console.WriteLine("=====================================");
-                    }
-                    // Revisar si fue BYTE
-                    else if (line.instruccion.Contains("BYTE"))
-                    {
-                        //Console.WriteLine("BYTE");
-                        // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
-                        line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
-                        // Si contiene una "C'" o "c'" contar el numero de caracteres, cada uno necesita un byte (Ejemplo: C'HELLO' = 5 bytes)
-                        // Si contiene una "X'" o "x'" contar el numero de nibles, cada dos nibles necesitan un byte´(Ejemplo: X'F1' = 1 byte)
-                        if (line.operadores.Contains("C'") || line.operadores.Contains("c'"))
-                        {
-                            var val = line.operadores.Replace("C'", "").Replace("c'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                            //Console.WriteLine(val + " " + val.Length);
-                            // Si es un caracter, pasar a ascii
-                            line.codobj = "";
-                            foreach (char c in val)
-                            {
-                                line.codobj += ((int)c).ToString("X");
-                            }
-                        }
-                        else
-                        {
-                            var val = line.operadores.Replace("X'", "").Replace("x'", "").Replace("'", "").Replace(" ", "").Replace("\t", "").Replace("\n", "");
-                           // Console.WriteLine(val + " " + val.Length);
-                            line.codobj = val;
-                            // Si es impar, agregar un 0 al inicio
-                            if (val.Length % 2 != 0) line.codobj = "0" + line.codobj;
-                        }
-                        //Console.WriteLine("=====================================");
-                    }
-                    // Revisar si fue WORD
-                    else if (line.instruccion.Contains("WORD"))
-                    {
-                        //Console.WriteLine("WORD");
-                        // Limpiar operadores en caso de que tengan saltos de linea o otras cosas
-                        line.operadores = line.operadores.Replace("\n", "").Replace("\t", "").Replace(" ", "");
-                        // Revisar si es hexadecimal o decimal
-                        if (line.operadores.Contains("H") || line.operadores.Contains("h"))
-                        {
-                            line.codobj = line.operadores.Replace("H", "").Replace("h", "");
-                        }
-                        else
-                        {
-                            line.codobj = int.Parse(line.operadores).ToString("X");
-                        }
-                        // Pasar a 6 caracteres
-                        line.codobj = line.codobj.PadLeft(6, '0');
-                    }
-                }
-
-                // Revisar si hay un corte de registro de texto
-                // Cuando hay un ORG, END, BASE, BYTE, WORD, RESB, RESW, RSUB
-                if (line.instruccion == "ORG" || line.instruccion == "END" || line.instruccion == "RESB" || line.instruccion == "RESW")
-                {
-                    // Si tmpcad no esta vacio, agregar a cad
-                    if (tmpcad != "")
-                    {
-                        cad += count.ToString("X").PadLeft(2, '0') + tmpcad;
-                        // Limpiar tmpcad
-                        tmpcad = "";
-                        // Agregar a tmpcad
-                        tmpcad += line.codobj;
-                        count = 0;
-                        Console.WriteLine("Cuenta rst 3: " + count);
-                    }
-                }
-
-                // Ver si genero codigo objeto sin errores
-                if (line.codobj != "")
-                {
-                    //Console.WriteLine(line.codobj);
-
-                    // Si tmpcad esta vacio, poner la dirección de inici
-                    if (tmpcad == "")
-                    {
-                        cad += "\nT";
-                        // a 6 caracteres desde la izquierda, si no, rellenar con ceros
-                        cad += line.cp.PadLeft(6, '0');
-                        count = 0;
-                        Console.WriteLine("Cuenta rst 1: " + count);
-                    }
-                    if (tmpcad.Length + line.codobj.Length <= 60)
-                    {
-                        tmpcad += line.codobj;
-                        // Sumar a count la longitud de codobj entre 2
-                        count += line.codobj.Length / 2;
-                        //count++;
-                        Console.WriteLine("Cuenta: " + count);
-                    }
-                    else
-                    {
-                        // Si tmpcad no esta vacio, agregar a cad
-                        cad += count.ToString("X").PadLeft(2, '0') + tmpcad;
-                        cad += "\nT";
-                        // a 6 caracteres desde la izquierda, si no, rellenar con ceros
-                        cad += line.cp.PadLeft(6, '0');
-
-                        // Limpiar tmpcad
-                        tmpcad = "";
-                        // Agregar a tmpcad
-                        tmpcad += line.codobj;
-                        count = 0;
-                        Console.WriteLine("Cuenta rst 2: " + count);
-                    }
-
-                }
-
-
-                // Si fue formatp 4 y no hubo errores, marcar como realocalizable con un * en codop
-                if (line.formato == "4" && line.error == "")
-                {
-                    line.codobj += "*";
-                }
-                Console.WriteLine("Instrucción: " + line.codobj);
-            }
-
-            // Recorrer lineas, para ver aquellas con *y agregarlas a cad como registro M
-            foreach (Line line in midData)
-            {
-                if (line.codobj.Contains("*"))
-                {
-                    // Poner M
-                    cad += "\nM";
-                    // Poner la dirección de inicio + 1
-                    cad += (int.Parse(line.cp, System.Globalization.NumberStyles.HexNumber) + 1).ToString("X").PadLeft(6, '0');
-                    // Poner 05
-                    cad += "05+" + start;
-                }
-            }
-
-            // Registro E, Si tiene etiqueta, poner su valor segun tabla de simbolos
-            // Si no, buscar la primera instrucción (que no sea directiva) y poner su dirección
-            cad += "\nE";
-            Line last = midData.Last();
-            if (last.etiqueta != "")
-            {
-                var sym = symData.Find(item => item.Item1 == last.etiqueta);
-                if (sym != null)
-                {
-                    cad += sym.Item2.PadLeft(6, '0');
-                }
-            }
-            else
-            {
-                foreach (Line line in midData)
-                {
-                    if (line.etiqueta == "")
-                    {
-                        // Buscar la primera instrucción que no sea directiva
-                        if (!line.instruccion.Contains("RES") && !line.instruccion.Contains("BYTE") && !line.instruccion.Contains("WORD"))
-                        {
-                            cad += line.cp.PadLeft(6, '0');
-                            break;
-                        }
-                    }
-                }
-            }
-            //Console.WriteLine(cad);
-            this.objCode = cad;
-
-            return;
-        }
-
-
-
-        public void createTables()
-        {
-            midFile = new Table("Archivo intermedio");
-            symTable = new Table("Tabla de símbolos");
-
-            // Agregar columnas al DataGridView
-            string[] columns = { "NUM", "FORMATO", "CP", "ETQ", "INS", "OPER", "CODOBJ", "ERROR", "MODO" };
-            foreach (var col in columns) midFile.dataGridView.Columns.Add(col, col);
-            // Agregar filas al DataGridView
-            foreach (Line row in midData)
-            {
-                midFile.dataGridView.Rows.Add(row.ToArray());
-            }
-
-            // Agregar columnas al DataGridView
-            string[] columnsSym = { "ETQ", "CP" };
-            foreach (var col in columnsSym) symTable.dataGridView.Columns.Add(col, col);
-            // Agregar filas al DataGridView
-            foreach (var row in symData) symTable.dataGridView.Rows.Add(row.Item1, row.Item2);
-
         }
 
         public string results()
@@ -855,40 +490,28 @@ namespace FSS_01
             }
             return null;
         }
-
     }
 
-    public class Line
+    // Clase para lineas de código
+    public class Linea
     {
-        public string linea { get; set; }
-        public string formato { get; set; }
-        public string cp { get; set; }
-        public string etiqueta { get; set; }
-        public string instruccion { get; set; }
-        public string operadores { get; set; }
+        public int line;
+        public int cp { get; set; }
+        public sicxeParser.EtiquetaContext etq { get; set; }
+        public ITerminalNode ins { get; set; }
+        public List<ITerminalNode> opers { get; set; }
         public string codobj { get; set; }
         public string error { get; set; }
         public string modo { get; set; }
-
-        public Line(string linea, string formato, string cp, string etiqueta, string instruccion, string operadores, string codobj, string error, string modo)
-        {
-            this.linea = linea;
-            this.formato = formato;
-            this.cp = cp;
-            this.etiqueta = etiqueta;
-            this.instruccion = instruccion;
-            this.operadores = operadores;
-            this.codobj = codobj;
-            this.error = error;
-            this.modo = modo;
-        }
-
-        public string[] ToArray()
-        {
-            List<string> tmp = new List<string> { linea, formato, cp, etiqueta, instruccion, operadores, codobj, error, modo };
-            return tmp.ToArray();
-        }
+        public bool indexado { get; set; }
+        public int formato { get; set; }
     }
 
-    
+    public class Simbolo
+    {
+        public string nombre { get; set; }
+        public int valor { get; set; }
+        public string expresion { get; set; }
+        public string tipo { get; set; }
+    }
 }

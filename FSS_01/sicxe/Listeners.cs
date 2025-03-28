@@ -12,6 +12,7 @@ namespace FSS_01
     {
         private String errores = "";
         public List<Tuple<int, string>> errorsLines = new List<Tuple<int, string>>();
+        public List<Tuple<int, IToken>> errorsLinesObj = new List<Tuple<int, IToken>>();
         private int c = 0;
 
         public String getErrores()
@@ -28,8 +29,9 @@ namespace FSS_01
         {
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
-            errores += $"Line {line}:{charPositionInLine} - {msg}\n";
+            errores += $"Line {line}:{charPositionInLine} - {msg} - {offendingSymbol}\n";
             errorsLines.Add(new Tuple<int, string>(line, msg));
+            errorsLinesObj.Add(new Tuple<int, IToken>(line, offendingSymbol));
             c++;
         }
 
@@ -52,6 +54,7 @@ namespace FSS_01
         private int c = 0;
         private String errores = "";
         public List<Tuple<int, string>> errorsLines = new List<Tuple<int, string>>();
+        public List<Tuple<int, int>> errorsLinesObj = new List<Tuple<int, int>>();
 
         public String getErrores()
         {
@@ -67,8 +70,9 @@ namespace FSS_01
         {
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
-            errores += $"Line {line}:{charPositionInLine} - {msg}\n";
+            errores += $"Line {line}:{charPositionInLine} - {msg} - {offendingSymbol}\n";
             errorsLines.Add(new Tuple<int, string>(line, msg));
+            errorsLinesObj.Add(new Tuple<int, int>(line, offendingSymbol));
             c++;
         }
 

@@ -87,6 +87,7 @@
     <Compile Include="vistas\tabView.Designer.cs">
       <DependentUpon>tabView.cs</DependentUpon>
     </Compile>
+    <Content Include="tests\P6\code1.asm" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

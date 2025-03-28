@@ -74,5 +74,7 @@
     "PC": "8",
     "CP": "8",
     "SW": "9"
-  }
+  },
+  "directivas": 
+    ["RESB", "RESW", "WORD", "BYTE", "EQU", "BASE"]
 }
