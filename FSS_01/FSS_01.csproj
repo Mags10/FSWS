@@ -73,6 +73,7 @@
     <Compile Include="sicxe\CompiladorSx.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="sicxe\ExpParsers.cs" />
     <Compile Include="sicxe\Listeners.cs" />
     <Content Include="tests\P04\ecode2.asm" />
     <Compile Include="vistas\Table.cs">
@@ -88,6 +89,7 @@
       <DependentUpon>tabView.cs</DependentUpon>
     </Compile>
     <Content Include="tests\P6\code1.asm" />
+    <Content Include="tests\P6\test01.asm" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

@@ -21,11 +21,12 @@ proposicion     :   directiva
 
 
 directiva       :   etiqueta? (RESB | RESW) NUM
-                |   etiqueta? WORD (EXPR | NUM)
-                |   etiqueta? EQU (EXPR | CPREF)
+                |   etiqueta? WORD (EXPR | NUM | ID)
+                |   etiqueta EQU (EXPR | CPREF | NUM)
                 |   etiqueta? BASE ID
                 |   etiqueta? BYTE (CONSTHEX | CONSTCAD)
                 |   USE ID?
+                |   ORG NUM
                 ;
 
 instruccion     :   etiqueta opinstruccion
@@ -40,6 +41,7 @@ EQU             :   'EQU';
 BASE            :   'BASE';
 CPREF           :   '*';
 USE			    :   'USE'; 
+ORG			    :   'ORG';
 
 etiqueta        :   ID;
 
@@ -67,18 +69,19 @@ inmediato       :   SIMINM (EXPR | NUM | ID);
 
 SIMINM          :   '#';
 
-f2              :   CODOPF2 (REG ',' (REG | NUM)) 
-                |   CODOPF2 REG
-                |   CODOPF2 NUM
+f2              :   CODOPF2T1 (REG ',' (REG | NUM)) 
+                |   CODOPF2T2 (REG | NUM)
                 ;
 
 f1              :   CODOPF1;
 
 CODOPF1         :   'FIX' | 'FLOAT' | 'HIO' | 'NORM' | 'SIO' | 'TIO';
 
-CODOPF2         :   'ADDR' | 'CLEAR' | 'COMPR' | 'DIVR' | 'MULR' | 'RMO' 
-                |   'SHIFTL' | 'SHIFTR' | 'SVC' | 'TIXR' | 'SUBR' 
-                ;
+
+CODOPF2T1       :   'ADDR' | 'COMPR' | 'DIVR' | 'MULR' | 'RMO' | 'SUBR' | 'SHIFTL' | 'SHIFTR';
+
+CODOPF2T2       :   'SVC' | 'TIXR' | 'CLEAR';
+
                 
 CODOPF4         :   PLUS CODOPF3
                 ;
@@ -95,7 +98,7 @@ CODOPF3         :   'ADD' | 'ADDF' | 'AND' | 'COMP' | 'COMPF' | 'DIV'
 
 REG             : 'A' | 'X' | 'L' | 'B' | 'S' | 'T' | 'F' | 'SW'; 
 
-NUM             : [0-9]+ ('H' | 'h')?;
+NUM             : [0-9]+ | [0-9A-F]+ ('H' | 'h') ;
 
 
 CONSTHEX        : 'X' APOS [0-9A-F]+ APOS;
@@ -107,24 +110,12 @@ APOS            : '\'';
 
 ID              : [a-zA-Z_][a-zA-Z_0-9]*;
 
-EXPR            : TERM EXPR2
-                ;
-
-EXPR2           : ('+' TERM | '-' TERM) EXPR2?
-                | 
-                ; 
-
-TERM            : FACTOR TERM2
-                ;
-
-TERM2           : ('*' FACTOR | '/' FACTOR) TERM2?
-                | 
-                ; 
-
-FACTOR          : NUM
+EXPR            : TERM (('+' | '-') TERM)* ;
+TERM            : FACTOR (('*' | '/') FACTOR)* ;
+FACTOR          : NUM 
                 | ID 
-                | '(' TERM ')'
-                ;
+                | '-' FACTOR       // Permite números y variables negativas
+                | '(' EXPR ')' ;
 
 PLUS			: '+';  
 
