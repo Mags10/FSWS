@@ -16,7 +16,7 @@ namespace FSS_01
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P6\\code1.asm";
+            string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P6-P7\\bloques.asm";
             CompiladorSx comp = new CompiladorSx(path);
             comp.compile();
 

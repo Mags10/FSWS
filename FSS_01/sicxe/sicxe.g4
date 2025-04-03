@@ -108,14 +108,17 @@ CONSTCAD        : 'C' APOS [a-zA-Z0-9]* APOS;
 APOS            : '\'';   
 
 
-ID              : [a-zA-Z_][a-zA-Z_0-9]*;
+ID              : [a-zA-Z][a-zA-Z0-9_]*;
 
 EXPR            : TERM (('+' | '-') TERM)* ;
 TERM            : FACTOR (('*' | '/') FACTOR)* ;
 FACTOR          : NUM 
                 | ID 
                 | '-' FACTOR       // Permite números y variables negativas
-                | '(' EXPR ')' ;
+                | OPENPAR EXPR CLOSEPAR ;
+
+OPENPAR 	 : '(';
+CLOSEPAR	 : ')';
 
 PLUS			: '+';  
 

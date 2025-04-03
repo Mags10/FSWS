@@ -110,11 +110,16 @@ namespace FSS_01
             parser.AddErrorListener(parslistener);
         }
 
+        private int step = 0;
+
         public void compile()
         {
+            step = 0;
             tree = parser.prog();
             firstStep();
+            step++;
             createObjectCode();
+            step++;
             createObjectProgram();
             createTables();
 
@@ -182,8 +187,9 @@ namespace FSS_01
 
             // Si hay un END, se crea un registro de finalización
             if (lineas[lineas.Count - 1].ins.GetText() == "END"){
+                if (lineas[lineas.Count - 1].error != null) objProg += "EFFFFFF";
                 // Si tiene operando es una etiqueta, se busca su valor en la tabla de símbolos
-                if (lineas[lineas.Count - 1].opers.Count > 0)
+                else if (lineas[lineas.Count - 1].opers.Count > 0)
                 {
                     var sim = simbolos.Find(x => x.nombre == lineas[lineas.Count - 1].opers[0].GetText());
                     if (sim != null)
@@ -236,7 +242,12 @@ namespace FSS_01
                                         if (reg != null) codobj += Convert.ToString(reg.Item2, 2).PadLeft(4, '0');
                                     }
                                     else
-                                        codobj += Convert.ToString(int.Parse(op.GetText()), 2).PadLeft(4, '0');
+                                    {
+                                        if(line.ins.GetText() != "SHIFTL" && line.ins.GetText() != "SHIFTR")
+                                            codobj += Convert.ToString(int.Parse(op.GetText()), 2).PadLeft(4, '0');
+                                        else
+                                            codobj += Convert.ToString(int.Parse(op.GetText()) - 1, 2).PadLeft(4, '0');
+                                    }
                                 }
                                 if (opers == 1) codobj += "0000";
                                 break;
@@ -258,6 +269,7 @@ namespace FSS_01
                                         break;
                                     }
                                 }
+                                Console.WriteLine("X: " + x);
                                 // Calcular dirección
                                 int dir = 0;
                                 if (line.opers.Count > 0)
@@ -269,8 +281,11 @@ namespace FSS_01
                                     else
                                         evalres = evalExpression(line.opers[0].GetText(), line, true);
 
+                                    Console.WriteLine(line.ToString());
+                                    Console.WriteLine("Evalres: " + evalres.Item1 + " " + evalres.Item2);
+
                                     // Si es ABS y está entre 0 y 4095 es c
-                                    if (evalres.Item1 == "ABS" && evalres.Item2 >= 0 && evalres.Item2 <= 4095)
+                                    if (evalres.Item1 == "ABS" && evalres.Item2 >= 0 && evalres.Item2 <= 4095 && line.formato == 3)
                                         // El valor de la dirección es el valor de la expresión
                                         dir = evalres.Item2;
                                     else
@@ -278,14 +293,21 @@ namespace FSS_01
                                         // Es m pero si es ABS 
                                         if (evalres.Item1 == "ABS" || line.formato == 4)
                                         {
+                                            dir = evalres.Item2;
                                             // Si no es mayor a 4095, es error de operando fuera de rango
                                             if (line.formato == 4 && evalres.Item1 == "REL") line.realoc = true;
+                                            else if (line.error == "Simbolo no encontrado" || line.error == "Expresión inválida")
+                                            {
+                                                b = 1;
+                                                p = 1;
+                                            }
                                             else if (evalres.Item2 <= 4095)
                                             {
+                                                b = 1;
+                                                p = 1;
+                                                dir = -1;
                                                 line.error = "Operando fuera de rango";
-                                                break;
-                                            }
-                                            dir = evalres.Item2;
+                                            } 
                                         }
                                         else
                                         {
@@ -312,7 +334,7 @@ namespace FSS_01
                                             }
                                         }
                                     }
-                                    if (line.error == "Símbolo duplicado") dir = -1;
+                                    //if (line.error == "Símbolo duplicado") dir = -1;
                                     
                                 }
 
@@ -320,8 +342,10 @@ namespace FSS_01
                                 codobj += Convert.ToString(n, 2) + Convert.ToString(i, 2) + Convert.ToString(x, 2) + Convert.ToString(b, 2) + Convert.ToString(p, 2) + Convert.ToString(e, 2);
 
                                 // Si la dirección es negativa.
-                                if (dir < 0)
+                                if (dir < 0 && line.formato == 3)
                                     dir = Convert.ToInt32(Convert.ToString(dir, 2).Substring(32 - 12), 2);
+                                else if (dir < 0 && line.formato == 4)
+                                    dir = Convert.ToInt32(Convert.ToString(dir, 2).Substring(32 - 20), 2);
 
                                 // Si es formato 4, poner la dirección en 20 bits, si no, en 12
                                 if (line.formato == 4)
@@ -337,10 +361,12 @@ namespace FSS_01
                     {
                         if (line.ins.GetText() == "WORD")
                         {
-                            var evalres = evalExpression(line.opers[0].GetText(), line);
+                            var evalres = evalExpression(line.opers[0].GetText(), line, true);
                             // Si es relativo, marcar para realocación
                             if (evalres.Item1 == "REL") line.realoc = true;
                             line.codobj = evalres.Item2.ToString("X").PadLeft(6, '0');
+                            // Limitar a ultimos 6 caracteres
+                            line.codobj = line.codobj.Substring(line.codobj.Length - 6);
                         }
                         else if (line.ins.GetText() == "BYTE")
                         {
@@ -350,6 +376,8 @@ namespace FSS_01
                                 val = val.Substring(2, val.Length - 3);
                             else if (val.Contains("C") || val.Contains("c"))
                                 val = string.Join("", val.Substring(2, val.Length - 3).Select(x => ((int)x).ToString("X")));
+                            // Si la longitud es impar, poner un 0 a la izquierda
+                            if (val.Length % 2 != 0) val = "0" + val;
                             line.codobj = val;
                         }
                     }
@@ -363,6 +391,14 @@ namespace FSS_01
                         var sim = simbolos.Find(x => x.nombre == line.opers[0].GetText());
                         if (sim != null) baseReg = sim.valor;
                         else line.error = "Símbolo no encontrado";
+                    }
+                    else if (line.ins.GetText() == "END")
+                    {
+                        // Revisar que exista el id en tabsim
+                        string val = line.opers[0].GetText();
+                        var sim = simbolos.Find(x => x.nombre == val);
+                        if (sim == null)
+                            line.error = "Símbolo no encontrado";
                     }
                 }
             }
@@ -408,7 +444,7 @@ namespace FSS_01
             {
                 var index = symTable.dataGridView.Rows.Add();
                 symTable.dataGridView.Rows[index].Cells[0].Value = sim.nombre;
-                symTable.dataGridView.Rows[index].Cells[1].Value = sim.valor.ToString("X");
+                symTable.dataGridView.Rows[index].Cells[1].Value = sim.valor.ToString("X").PadLeft(4, '0').Substring(sim.valor.ToString("X").PadLeft(4, '0').Length - 4);
                 symTable.dataGridView.Rows[index].Cells[2].Value = sim.expresion;
                 symTable.dataGridView.Rows[index].Cells[3].Value = sim.tipo;
                 symTable.dataGridView.Rows[index].Cells[4].Value = sim.bloque;
@@ -424,8 +460,8 @@ namespace FSS_01
                 var index = blockTable.dataGridView.Rows.Add();
                 blockTable.dataGridView.Rows[index].Cells[0].Value = block.num;
                 blockTable.dataGridView.Rows[index].Cells[1].Value = block.nombre;
-                blockTable.dataGridView.Rows[index].Cells[2].Value = block.lon.ToString("X");
-                blockTable.dataGridView.Rows[index].Cells[3].Value = block.dir.ToString("X");
+                blockTable.dataGridView.Rows[index].Cells[2].Value = block.lon.ToString("X").PadLeft(4, '0').Substring(block.lon.ToString("X").PadLeft(4, '0').Length - 4);
+                blockTable.dataGridView.Rows[index].Cells[3].Value = block.dir.ToString("X").PadLeft(4, '0').Substring(block.dir.ToString("X").PadLeft(4, '0').Length - 4);
             }
 
             // Autoajustar columnas al contenido
@@ -448,8 +484,6 @@ namespace FSS_01
         private void firstStep()
         {
             int numLine = 1;
-            // Crear lineas de código
-            Linea tmpLine = new Linea();
 
             // Bloques
             Bloque tmpBloque = new Bloque();
@@ -458,6 +492,8 @@ namespace FSS_01
             tmpBloque.num = 0;
             tmpBloque.nombre = "Por omisión";
 
+            // Crear lineas de código
+            Linea tmpLine = new Linea();
             //tree.inicio().etiqueta();
             tmpLine.etq = tree.inicio().etiqueta();
             tmpLine.ins = tree.inicio().START();
@@ -789,19 +825,40 @@ namespace FSS_01
 
         private Tuple<string, int> evalExpression(string expr, Linea tmpLine, bool realDirs = false)
         {
+            //Console.WriteLine("Evaluando expresión: " + expr);
             int res = -1;
             string tipo = "";
             string resalt = expr;
+            int blk = -1;
             foreach (var sim in simbolos)
             {
                 // Revisar si si está en la expresión
-                if (expr.Contains(sim.nombre))
+                string pattern = $@"\b{Regex.Escape(sim.nombre)}\b";
+                if (Regex.IsMatch(expr, pattern))
                 {
+                    // Revisar que la coincidencia sea exacta, por que puede existir EXPRES, y entraria si hay un simbolo llamado EXPRE
+                    // Entraria falsamente
+                    if (expr.Contains(sim.nombre + " "))
+                        continue;
+
                     resalt = resalt.Replace(sim.nombre, sim.tipo);
                     if (sim.tipo == "REL" && realDirs)
+                    {
+                        //Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
                         expr = expr.Replace(sim.nombre, (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
+                    }
                     else
+                    {
+                        //Console.WriteLine("Reemplazando " + sim.nombre + " por " + sim.valor.ToString());
                         expr = expr.Replace(sim.nombre, sim.valor.ToString());
+                    }
+                    if (blk == -1) blk = sim.bloque;
+                    else if (blk != sim.bloque && step == 0)
+                    {
+                        tmpLine.error = "Expresión inválida";
+                        res = -1;
+                        return new Tuple<string, int>("ABS", res);
+                    }
                 }
             }
             if (expr.Contains("+") || expr.Contains("-") || expr.Contains("*") || expr.Contains("/"))
@@ -834,6 +891,7 @@ namespace FSS_01
             }
 
             resalt = ExpressionTransformer.Transform(resalt);
+            //Console.WriteLine("Expresión transformada: " + resalt);
 
             int negAbs = Regex.Matches(resalt, "\\-ABS").Count;
             resalt = resalt.Replace("-ABS", "");
@@ -872,6 +930,7 @@ namespace FSS_01
                     res = -1;
                 }
             }
+            //Console.WriteLine("Resultado: " + tipo + " " + res);
             return new Tuple<string, int>(tipo, res);
         }
 
