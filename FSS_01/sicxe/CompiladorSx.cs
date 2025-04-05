@@ -117,9 +117,7 @@ namespace FSS_01
             step = 0;
             tree = parser.prog();
             firstStep();
-            step++;
             createObjectCode();
-            step++;
             createObjectProgram();
             createTables();
 
@@ -193,7 +191,7 @@ namespace FSS_01
                 {
                     var sim = simbolos.Find(x => x.nombre == lineas[lineas.Count - 1].opers[0].GetText());
                     if (sim != null)
-                        objProg += "E" + sim.valor.ToString("X").PadLeft(6, '0');
+                        objProg += "E" + (sim.valor + bloques[sim.bloque].dir).ToString("X").PadLeft(6, '0');
                 }
                 else
                     objProg += "E" + primeraInstr.ToString("X").PadLeft(6, '0');
@@ -610,7 +608,8 @@ namespace FSS_01
                                 tmpBloque.nombre = id.GetText();
                                 tmpBloque.localCP = 0;
                             }
-                            else tmpBloque = bloques.Find(x => x.nombre == id.GetText());
+                            else 
+                                tmpBloque = bloques.Find(x => x.nombre == id.GetText());
                         }
                         else
                         {
@@ -728,6 +727,8 @@ namespace FSS_01
                 // if (tmpLine.error == null) progCP += tmpLine.formato;
                 if (tmpLine.error == "Símbolo duplicado" || tmpLine.error == null) tmpBloque.localCP += tmpLine.formato;
                 lineas.Add(tmpLine);
+
+                Console.WriteLine("Linea: " + tmpLine.line + " " + tmpLine.ins.GetText() + " " + tmpLine.opers.Count);
             }
 
             // Añadir bloque a la lista
@@ -735,8 +736,8 @@ namespace FSS_01
                 bloques.Add(tmpBloque);
 
             tmpLine = new Linea();
-            tmpLine.cp = tmpBloque.localCP;
-            tmpLine.bloque = tmpBloque.num;
+            tmpLine.cp = bloques[0].localCP;
+            tmpLine.bloque = bloques[0].num;
             tmpLine.ins = tree.fin().END();
             tmpLine.opers = new List<ITerminalNode> { };
             tmpLine.line = numLine++;
@@ -844,23 +845,34 @@ namespace FSS_01
                     resalt = resalt.Replace(sim.nombre, sim.tipo);
                     if (sim.tipo == "REL" && realDirs)
                     {
-                        //Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
+                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
                         expr = expr.Replace(sim.nombre, (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
                     }
                     else
                     {
-                        //Console.WriteLine("Reemplazando " + sim.nombre + " por " + sim.valor.ToString());
+                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + sim.valor.ToString());
                         expr = expr.Replace(sim.nombre, sim.valor.ToString());
                     }
                     if (blk == -1) blk = sim.bloque;
-                    else if (blk != sim.bloque && step == 0)
+                    else if (blk != sim.bloque && step == 0 && !realDirs)
                     {
-                        tmpLine.error = "Expresión inválida";
+                        tmpLine.error = "Expresión inválida 1";
                         res = -1;
                         return new Tuple<string, int>("ABS", res);
                     }
                 }
             }
+
+            // Sin contiene h o H, transformar ese valor a entero
+            string patternhex = @"\b[0-9A-Fa-f]+(h|H)\b";
+            if (Regex.IsMatch(expr, patternhex))
+                expr = Regex.Replace(expr, patternhex, m => Convert.ToInt32(m.Value.Substring(0, m.Value.Length - 1), 16).ToString());
+            
+            if (Regex.IsMatch(resalt, patternhex))
+                resalt = Regex.Replace(resalt, patternhex, m => Convert.ToInt32(m.Value.Substring(0, m.Value.Length - 1), 16).ToString());
+            
+
+            Console.WriteLine("Expresión: " + expr);
             if (expr.Contains("+") || expr.Contains("-") || expr.Contains("*") || expr.Contains("/"))
             {
                 try
@@ -873,7 +885,7 @@ namespace FSS_01
                 {
                     res = -1;
                     // Indicar error de expresión
-                    tmpLine.error = "Expresión inválida";
+                    tmpLine.error = "Expresión inválida 2";
                 }
             }
             else
@@ -890,8 +902,9 @@ namespace FSS_01
                 }
             }
 
+            Console.WriteLine("Pre evaluación: " + resalt);
             resalt = ExpressionTransformer.Transform(resalt);
-            //Console.WriteLine("Expresión transformada: " + resalt);
+            Console.WriteLine("Expresión transformada: " + resalt);
 
             int negAbs = Regex.Matches(resalt, "\\-ABS").Count;
             resalt = resalt.Replace("-ABS", "");
@@ -925,12 +938,12 @@ namespace FSS_01
                 }
                 else
                 {
-                    tmpLine.error = "Expresión inválida";
+                    tmpLine.error = "Expresión inválida 3";
                     tipo = "ABS";
                     res = -1;
                 }
             }
-            //Console.WriteLine("Resultado: " + tipo + " " + res);
+            Console.WriteLine("Resultado: " + tipo + " " + res);
             return new Tuple<string, int>(tipo, res);
         }
 

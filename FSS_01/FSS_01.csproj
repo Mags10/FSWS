@@ -88,12 +88,15 @@
     <Compile Include="vistas\tabView.Designer.cs">
       <DependentUpon>tabView.cs</DependentUpon>
     </Compile>
-    <Content Include="tests\P6-P7\BLOQUES.asm" />
-    <Content Include="tests\P6-P7\eval_final.asm" />
-    <Content Include="tests\P6-P7\ejerexpres.asm" />
-    <Content Include="tests\P6-P7\EXPR1_EJEMEXPRE.asm" />
-    <Content Include="tests\P6-P7\EXPR2_EXPRESIONES.asm" />
-    <Content Include="tests\P6-P7\EXPR3_EJEREXPRES.asm" />
+    <Content Include="tests\P06-P7\BLOQUES.asm" />
+    <Content Include="tests\P06-P7\eval_final.asm" />
+    <Content Include="tests\P06-P7\ejerexpres.asm" />
+    <Content Include="tests\P06-P7\EXPR1_EJEMEXPRE.asm" />
+    <Content Include="tests\P06-P7\EXPR2_EXPRESIONES.asm" />
+    <Content Include="tests\P06-P7\EXPR3_EJEREXPRES.asm" />
+    <Content Include="tests\P08\BLOQUES_COPY_START0H.asm" />
+    <Content Include="tests\P08\BLOQUES_EJEM2_START0H.asm" />
+    <Content Include="tests\P08\BLOQUES_EJERFINAL_START0H.asm" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

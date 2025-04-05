@@ -16,7 +16,9 @@ namespace FSS_01
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P6-P7\\bloques.asm";
+            string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P08\\BLOQUES_COPY_START0H.asm";
+            //string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P08\\BLOQUES_EJEM2_START0H.asm";
+            //string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\P08\\BLOQUES_EJERFINAL_START0H.asm";
             CompiladorSx comp = new CompiladorSx(path);
             comp.compile();
 
