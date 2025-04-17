@@ -20,7 +20,10 @@ proposicion     :   directiva
                 ;
 
 
-directiva       :   etiqueta? (RESB | RESW) NUM
+directiva       :   ID CSECT 
+                |   EXTDEF ID (',' ID)*
+                |   EXTREF ID (',' ID)*
+                |   etiqueta? (RESB | RESW) NUM
                 |   etiqueta? WORD (EXPR | NUM | ID)
                 |   etiqueta EQU (EXPR | CPREF | NUM)
                 |   etiqueta? BASE ID
@@ -42,6 +45,9 @@ BASE            :   'BASE';
 CPREF           :   '*';
 USE			    :   'USE'; 
 ORG			    :   'ORG';
+CSECT           :   'CSECT';
+EXTDEF         :   'EXTDEF';
+EXTREF         :   'EXTREF';
 
 etiqueta        :   ID;
 

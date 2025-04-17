@@ -21,7 +21,7 @@ namespace FSS_01
         // Lexer para el código fuente
         private sicxeLexer lexer;
         // Código fuente en ensamblador tokenizado
-        private CommonTokenStream tokens;
+        public CommonTokenStream tokens;
         // Parser para el código fuente
         private sicxeParser parser;
         // Listeners para errores
@@ -33,43 +33,45 @@ namespace FSS_01
         private DateTime date;
         private bool alreadyCompiled = false;
         // Lista de reglas por ANTLR
-        private List<Tuple<string, int>> ruleList = new List<Tuple<string, int>>();
+        public List<Tuple<string, int>> ruleList = new List<Tuple<string, int>>();
         // Tablas de datos
         public Table midFile;
-        public Table symTable;
-        public Table blockTable;
-        // Datos en lista de listas del tipo ["NUM", "FORMATO", "CP", "ETQ", "INS", "OPER", "CODOBJ", "ERROR", "MODO"]
 
-        // Relación de instrucciones y su código de operación
-        private List<Tuple<string,int>> opers = new List<Tuple<string, int>>();
-        // Relación de registros y su código de operación
-        private List<Tuple<string, int>> regs = new List<Tuple<string, int>>();
-        // Lista de directivas
-        private List<string> directivas = new List<string>();
         // Path de archivo
         private string path;
 
         // Tabla de símbolos
-        private List<Simbolo> simbolos = new List<Simbolo>();
-        private List<Bloque> bloques = new List<Bloque>();
-        List<Linea> lineas = new List<Linea>();
+        public List<Seccion> secciones = new List<Seccion>();
+
+        public List<Linea> lineas = new List<Linea>();
 
         public String programObj = "";
 
-        public CompiladorSx(string path)
+        private static bool inic = false;
+        // Relación de instrucciones y su código de operación
+        static private List<Tuple<string, int>> opers = new List<Tuple<string, int>>();
+        // Relación de registros y su código de operación
+        static private List<Tuple<string, int>> regs = new List<Tuple<string, int>>();
+        // Lista de directivas
+        static private List<string> directivas = new List<string>();
+
+        public CompiladorSx()
         {
-            loadCode(path);
-            // Cargar las instrucciones y sus códigos de operación
-            var json = System.IO.File.ReadAllText("../../sicxe/sicxe.json");
-            var jsonObject = JsonConvert.DeserializeObject<JObject>(json);
-            var instrucciones = jsonObject["instrucciones"].ToObject<Dictionary<string, string>>();
-            var registros = jsonObject["registros"].ToObject<Dictionary<string, string>>();
-            foreach (var instr in instrucciones)
-                opers.Add(new Tuple<string, int>(instr.Key, int.Parse(instr.Value, System.Globalization.NumberStyles.HexNumber)));
-            foreach (var reg in registros)
-                regs.Add(new Tuple<string, int>(reg.Key, int.Parse(reg.Value, System.Globalization.NumberStyles.HexNumber)));
-            // Cargar las directivas
-            directivas = jsonObject["directivas"].ToObject<List<string>>();
+            // Cargar las instrucciones y sus códigos de operación para todas las instancias
+            if (!inic)
+            {
+                var json = System.IO.File.ReadAllText("../../sicxe/sicxe.json");
+                var jsonObject = JsonConvert.DeserializeObject<JObject>(json);
+                var instrucciones = jsonObject["instrucciones"].ToObject<Dictionary<string, string>>();
+                var registros = jsonObject["registros"].ToObject<Dictionary<string, string>>();
+                foreach (var instr in instrucciones)
+                    opers.Add(new Tuple<string, int>(instr.Key, int.Parse(instr.Value, System.Globalization.NumberStyles.HexNumber)));
+                foreach (var reg in registros)
+                    regs.Add(new Tuple<string, int>(reg.Key, int.Parse(reg.Value, System.Globalization.NumberStyles.HexNumber)));
+                // Cargar las directivas
+                directivas = jsonObject["directivas"].ToObject<List<string>>();
+                inic = true;
+            }
         }
 
         public void loadCode(string path)
@@ -108,17 +110,32 @@ namespace FSS_01
             lexer.AddErrorListener(lexelistener);
             parser.RemoveErrorListeners();
             parser.AddErrorListener(parslistener);
+
+            // Reinciar lo necesario
+            lineas.Clear();
+            secciones.Clear();
+            midFile = null;
+            programObj = "";
+            date = DateTime.Now;
+            alreadyCompiled = false;
+            step = 0;
         }
 
         private int step = 0;
 
-        public void compile()
+        public void procLines()
         {
             step = 0;
             tree = parser.prog();
             firstStep();
+            step = 1;
+        }
+
+        public void compile()
+        {
+            if (step == 0) procLines();
             createObjectCode();
-            createObjectProgram();
+            //createObjectProgram();
             createTables();
 
             alreadyCompiled = true;
@@ -133,6 +150,7 @@ namespace FSS_01
             Console.WriteLine(tree.ToStringTree(parser));
         }
 
+        /*
         private void createObjectProgram()
         {
             // Instrucciones de corte
@@ -199,6 +217,7 @@ namespace FSS_01
 
             this.programObj = objProg;
         }
+        */
 
         private void createObjectCode()
         {
@@ -275,9 +294,9 @@ namespace FSS_01
                                     // Evaluar la expresión
                                     Tuple<string, int> evalres;
                                     if (line.opers[0].Symbol.Type == sicxeLexer.NUM)
-                                        evalres = evalExpression(toInt(line.opers[0].GetText()).ToString(), line, true);
+                                        evalres = evalExpression(secciones[line.seccion], toInt(line.opers[0].GetText()).ToString(), line, true);
                                     else
-                                        evalres = evalExpression(line.opers[0].GetText(), line, true);
+                                        evalres = evalExpression(secciones[line.seccion], line.opers[0].GetText(), line, true);
 
                                     Console.WriteLine(line.ToString());
                                     Console.WriteLine("Evalres: " + evalres.Item1 + " " + evalres.Item2);
@@ -299,6 +318,10 @@ namespace FSS_01
                                                 b = 1;
                                                 p = 1;
                                             }
+                                            else if (evalres.Item1 == "SE")
+                                            {
+                                                dir = evalres.Item2;
+                                            }
                                             else if (evalres.Item2 <= 4095)
                                             {
                                                 b = 1;
@@ -309,7 +332,7 @@ namespace FSS_01
                                         }
                                         else
                                         {
-                                            int blokDir = bloques.Find(xf => xf.num == line.bloque).dir;
+                                            int blokDir = secciones[line.seccion].bloques.Find(xf => xf.num == line.bloque).dir;
                                             var cp = line.cp + line.formato;
                                             var despcp = evalres.Item2 - (cp + blokDir);
                                             var desbase = evalres.Item2 - baseReg;
@@ -359,7 +382,7 @@ namespace FSS_01
                     {
                         if (line.ins.GetText() == "WORD")
                         {
-                            var evalres = evalExpression(line.opers[0].GetText(), line, true);
+                            var evalres = evalExpression(secciones[line.seccion], line.opers[0].GetText(), line, true);
                             // Si es relativo, marcar para realocación
                             if (evalres.Item1 == "REL") line.realoc = true;
                             line.codobj = evalres.Item2.ToString("X").PadLeft(6, '0');
@@ -386,37 +409,40 @@ namespace FSS_01
                     if (line.ins.GetText() == "BASE")
                     {
                         // Buscar el valor en la tabla de símbolos
-                        var sim = simbolos.Find(x => x.nombre == line.opers[0].GetText());
+                        var sim = secciones[line.seccion].simbolos.Find(x => x.nombre == line.opers[0].GetText());
                         if (sim != null) baseReg = sim.valor;
                         else line.error = "Símbolo no encontrado";
                     }
-                    else if (line.ins.GetText() == "END")
+                    else if (line.ins.GetText() == "END" && line.opers.Count > 0)
                     {
+                        Console.WriteLine("End: " + line.opers.Count);
                         // Revisar que exista el id en tabsim
                         string val = line.opers[0].GetText();
-                        var sim = simbolos.Find(x => x.nombre == val);
+                        var sim = secciones[line.seccion].simbolos.Find(x => x.nombre == val);
                         if (sim == null)
                             line.error = "Símbolo no encontrado";
                     }
                 }
             }
         }
+        
 
         private void createTables()
         {
             midFile = new Table("Tabla Intermedia");
-            List<String> mdHeaders = new List<String> { "Linea", "Formato", "Bloque", "CP", "Etiqueta", "Instrucción", "Operando", "Código Objeto", "Error", "Modo" };
+            List<String> mdHeaders = new List<String> { "Linea", "Formato", "Sección", "Bloque", "CP", "Etiqueta", "Instrucción", "Operando", "Código Objeto", "Error", "Modo" };
             foreach (var header in mdHeaders) midFile.dataGridView.Columns.Add(header, header);
             foreach (var line in lineas)
             {
                 var index = midFile.dataGridView.Rows.Add();
                 midFile.dataGridView.Rows[index].Cells[0].Value = line.line;
                 midFile.dataGridView.Rows[index].Cells[1].Value = line.formato;
-                midFile.dataGridView.Rows[index].Cells[2].Value = line.bloque;
-                // Pasar a hexadecimal
-                midFile.dataGridView.Rows[index].Cells[3].Value = line.cp.ToString("X");
-                midFile.dataGridView.Rows[index].Cells[4].Value = (line.etq != null) ? line.etq.GetText() : "";
-                midFile.dataGridView.Rows[index].Cells[5].Value = (line.ins != null) ? line.ins.GetText() : "RSUB";
+                midFile.dataGridView.Rows[index].Cells[2].Value = line.seccion;
+                midFile.dataGridView.Rows[index].Cells[3].Value = line.bloque;
+                // Pasar a hexadecimal y ajustar a 4 caracteres
+                midFile.dataGridView.Rows[index].Cells[4].Value = line.cp.ToString("X").PadLeft(4, '0');
+                midFile.dataGridView.Rows[index].Cells[5].Value = (line.etq != null) ? line.etq.GetText() : "";
+                midFile.dataGridView.Rows[index].Cells[6].Value = (line.ins != null) ? line.ins.GetText() : "RSUB";
                 string oper = "";
                 // Ver el tipo de operando
                 if (line.modo == "Inmediato")
@@ -429,66 +455,54 @@ namespace FSS_01
                         oper += op.GetText() + ", ";
                 }
                 oper = oper.TrimEnd(' ').TrimEnd(',');
-                midFile.dataGridView.Rows[index].Cells[6].Value = oper;
-                midFile.dataGridView.Rows[index].Cells[7].Value = line.codobj + ((line.realoc) ? " *" : "");
-                midFile.dataGridView.Rows[index].Cells[8].Value = line.error;
-                midFile.dataGridView.Rows[index].Cells[9].Value = line.modo;
+                midFile.dataGridView.Rows[index].Cells[7].Value = oper;
+                midFile.dataGridView.Rows[index].Cells[8].Value = line.codobj + ((line.realoc) ? " *R" : "") + " " + line.modreg;
+                midFile.dataGridView.Rows[index].Cells[9].Value = line.error;
+                midFile.dataGridView.Rows[index].Cells[10].Value = line.modo;
             }
 
-            symTable = new Table("Tabla de Símbolos");
-            List<String> symHeaders = new List<String> { "Nombre", "Valor", "Expresión", "Tipo", "Bloque" };
-            foreach (var header in symHeaders) symTable.dataGridView.Columns.Add(header, header);
-            foreach (var sim in simbolos)
+            // 1. Desactivar el autosize general
+            midFile.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            for (int i = 0; i < 5 && i < midFile.dataGridView.Columns.Count; i++)
             {
-                var index = symTable.dataGridView.Rows.Add();
-                symTable.dataGridView.Rows[index].Cells[0].Value = sim.nombre;
-                symTable.dataGridView.Rows[index].Cells[1].Value = sim.valor.ToString("X").PadLeft(4, '0').Substring(sim.valor.ToString("X").PadLeft(4, '0').Length - 4);
-                symTable.dataGridView.Rows[index].Cells[2].Value = sim.expresion;
-                symTable.dataGridView.Rows[index].Cells[3].Value = sim.tipo;
-                symTable.dataGridView.Rows[index].Cells[4].Value = sim.bloque;
-
+                midFile.dataGridView.Columns[i].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                midFile.dataGridView.Columns[i].Width = 40;
+                midFile.dataGridView.Columns[i].Resizable = DataGridViewTriState.False;
             }
 
-
-            blockTable = new Table("Tabla de Bloques");
-            List<String> blockHeaders = new List<String> { "Número", "Nombre", "Longitud", "Dirección"};
-            foreach (var header in blockHeaders) blockTable.dataGridView.Columns.Add(header, header);
-            foreach (var block in bloques)
+            // Las demás se ajustan automáticamente al contenido
+            for (int i = 5; i < midFile.dataGridView.Columns.Count; i++)
             {
-                var index = blockTable.dataGridView.Rows.Add();
-                blockTable.dataGridView.Rows[index].Cells[0].Value = block.num;
-                blockTable.dataGridView.Rows[index].Cells[1].Value = block.nombre;
-                blockTable.dataGridView.Rows[index].Cells[2].Value = block.lon.ToString("X").PadLeft(4, '0').Substring(block.lon.ToString("X").PadLeft(4, '0').Length - 4);
-                blockTable.dataGridView.Rows[index].Cells[3].Value = block.dir.ToString("X").PadLeft(4, '0').Substring(block.dir.ToString("X").PadLeft(4, '0').Length - 4);
+                midFile.dataGridView.Columns[i].AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             }
 
-            // Autoajustar columnas al contenido
-            midFile.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
-            midFile.dataGridView.AutoResizeColumns();
-            midFile.dataGridView.AutoResizeRows();
+            // Cambiar el tamaño de ñetra del header    
+            midFile.dataGridView.ColumnHeadersDefaultCellStyle.Font = new System.Drawing.Font("Arial", 6);
+
             midFile.dataGridView.Refresh();
 
-            symTable.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
-            symTable.dataGridView.AutoResizeColumns();
-            symTable.dataGridView.AutoResizeRows();
-            symTable.dataGridView.Refresh();
-
-            blockTable.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
-            blockTable.dataGridView.AutoResizeColumns();
-            blockTable.dataGridView.AutoResizeRows();
-            blockTable.dataGridView.Refresh();
+            // para cada sección, crear sus tablas 
+            foreach(Seccion sec in secciones)
+            {
+                sec.createTables();
+            }
         }
 
         private void firstStep()
         {
             int numLine = 1;
 
+            // Seccion
+            Seccion tmpSeccion = new Seccion();
+            tmpSeccion.num = secciones.Count();
+            tmpSeccion.tmpBloque = new Bloque();
+
             // Bloques
-            Bloque tmpBloque = new Bloque();
-            tmpBloque.dir = 0;
-            tmpBloque.localCP = 0;
-            tmpBloque.num = 0;
-            tmpBloque.nombre = "Por omisión";
+            tmpSeccion.tmpBloque.dir = 0;
+            tmpSeccion.tmpBloque.localCP = 0;
+            tmpSeccion.tmpBloque.num = 0;
+            tmpSeccion.tmpBloque.nombre = "Por omisión";
 
             // Crear lineas de código
             Linea tmpLine = new Linea();
@@ -497,8 +511,10 @@ namespace FSS_01
             tmpLine.ins = tree.inicio().START();
             tmpLine.opers = new List<ITerminalNode> { tree.inicio().NUM() };
             tmpLine.line = numLine++;
-            tmpLine.bloque = tmpBloque.num;
-            tmpLine.cp = tmpBloque.localCP;
+            tmpLine.bloque = tmpSeccion.tmpBloque.num;
+            tmpLine.cp = tmpSeccion.tmpBloque.localCP;
+            tmpLine.seccion = tmpSeccion.num;
+
             checkError();
             lineas.Add(tmpLine);
 
@@ -507,11 +523,12 @@ namespace FSS_01
             foreach (var prop in tmp2)
             {
                 tmpLine = new Linea();
-                tmpLine.cp = tmpBloque.localCP;
-                tmpLine.bloque = tmpBloque.num;
+                tmpLine.cp = tmpSeccion.tmpBloque.localCP;
+                tmpLine.bloque = tmpSeccion.tmpBloque.num;
                 tmpLine.line = numLine++;
                 tmpLine.opers = new List<ITerminalNode>();
                 tmpLine.indexado = false;
+                tmpLine.seccion = tmpSeccion.num;
                 checkError();
 
                 if (prop.directiva() != null)
@@ -521,7 +538,10 @@ namespace FSS_01
 
                     var num = lineaDirect.NUM();
                     var expr = lineaDirect.EXPR();
-                    var id = lineaDirect.ID();
+                    var ids = lineaDirect.ID();
+                    ITerminalNode id = null;
+                    if (lineaDirect.ID() != null && lineaDirect.ID().Length > 0)
+                        id = lineaDirect.ID()[0];
                     var consChar = lineaDirect.CONSTCAD();
                     var consHex = lineaDirect.CONSTHEX();
                     var cpref = lineaDirect.CPREF();
@@ -566,7 +586,7 @@ namespace FSS_01
                         tmpLine.ins = lineaDirect.BASE();
                         tmpLine.opers.Add(id);
                         // Buscar el valor en la tabla de símbolos
-                        var sim = simbolos.Find(x => x.nombre == id.GetText());
+                        var sim = tmpSeccion.simbolos.Find(x => x.nombre == id.GetText());
                         if (tmpLine.etq != null)
                             addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
                     }
@@ -596,28 +616,28 @@ namespace FSS_01
                     else if (lineaDirect.USE() != null)
                     {
                         // Añadir bloque a la lista si no está
-                        if (!bloques.Contains(tmpBloque))
-                            bloques.Add(tmpBloque);
+                        if (!tmpSeccion.bloques.Contains(tmpSeccion.tmpBloque))
+                            tmpSeccion.bloques.Add(tmpSeccion.tmpBloque);
                         // Revisar si no existe el bloque con el nombre
                         if (id != null)
                         {
-                            if (bloques.FindIndex(x => x.nombre == id.GetText()) == -1)
+                            if (tmpSeccion.bloques.FindIndex(x => x.nombre == id.GetText()) == -1)
                             {
-                                tmpBloque = new Bloque();
-                                tmpBloque.num = bloques.Count;
-                                tmpBloque.nombre = id.GetText();
-                                tmpBloque.localCP = 0;
+                                tmpSeccion.tmpBloque = new Bloque();
+                                tmpSeccion.tmpBloque.num = tmpSeccion.bloques.Count;
+                                tmpSeccion.tmpBloque.nombre = id.GetText();
+                                tmpSeccion.tmpBloque.localCP = 0;
                             }
-                            else 
-                                tmpBloque = bloques.Find(x => x.nombre == id.GetText());
+                            else
+                                tmpSeccion.tmpBloque = tmpSeccion.bloques.Find(x => x.nombre == id.GetText());
                         }
                         else
                         {
                             // Tomar el bloque por omisión
-                            tmpBloque = bloques.Find(x => x.nombre == "Por omisión");
+                            tmpSeccion.tmpBloque = tmpSeccion.bloques.Find(x => x.nombre == "Por omisión");
                         }
-                        tmpLine.bloque = tmpBloque.num;
-                        tmpLine.cp = tmpBloque.localCP;
+                        tmpLine.bloque = tmpSeccion.tmpBloque.num;
+                        tmpLine.cp = tmpSeccion.tmpBloque.localCP;
                         tmpLine.ins = lineaDirect.USE();
                         tmpLine.opers.Add(id);
                     }
@@ -627,6 +647,54 @@ namespace FSS_01
                         tmpLine.opers.Add(num);
                         int valCpPr = toInt(num.GetText());
                         tmpLine.formato = valCpPr - tmpLine.cp;
+                    }
+                    else if (lineaDirect.EXTREF() != null)
+                    {
+                        tmpLine.ins = lineaDirect.EXTREF();
+                        foreach (var ext in ids)
+                        {
+                            addToSymTable(ext.GetText(), "-", "-", true);
+                            tmpLine.opers.Add(ext);
+                        }
+                        tmpLine.formato = 0;
+                    }
+                    else if (lineaDirect.EXTDEF() != null)
+                    {
+                        tmpLine.ins = lineaDirect.EXTDEF();
+                        foreach (var ext in ids)
+                        {
+                            tmpSeccion.definidos.Add(ext);
+                            tmpLine.opers.Add(ext);
+                        }
+                        tmpLine.formato = 0;
+                    } 
+                    else if (lineaDirect.CSECT() != null)
+                    {
+                        Console.WriteLine("CSECT");
+                        tmpLine.ins = lineaDirect.CSECT();
+                        // Se añade bloque a la lista
+                        if (!tmpSeccion.bloques.Contains(tmpSeccion.tmpBloque))
+                            tmpSeccion.bloques.Add(tmpSeccion.tmpBloque);
+
+                        // Se añade sección a la lista
+                        if (!secciones.Contains(tmpSeccion))
+                            secciones.Add(tmpSeccion);
+
+                        // Se crea una nueva sección
+                        tmpSeccion = new Seccion();
+                        tmpSeccion.tmpBloque = new Bloque();
+
+                        // Bloques
+                        tmpSeccion.tmpBloque.dir = 0;
+                        tmpSeccion.tmpBloque.localCP = 0;
+                        tmpSeccion.tmpBloque.num = 0;
+                        tmpSeccion.tmpBloque.nombre = "Por omisión";
+
+                        tmpSeccion.num = secciones.Count();
+                        tmpLine.seccion = tmpSeccion.num;
+
+                        tmpLine.formato = 0;
+                        tmpLine.cp = 0;
                     }
                 }
                 else if (prop.instruccion() != null)
@@ -723,38 +791,83 @@ namespace FSS_01
                     if (tmpLine.etq != null)
                         addToSymTable(tmpLine.etq.GetText(), tmpLine.cp.ToString(), "REL");
                 }
-                // Calcular CP solo si no hay errores sintacticos, si es de simbolo duplicado, sumarlo igul
-                // if (tmpLine.error == null) progCP += tmpLine.formato;
-                if (tmpLine.error == "Símbolo duplicado" || tmpLine.error == null) tmpBloque.localCP += tmpLine.formato;
+                // Calcular CP solo si no hay errores sintacticos, si es de simbolo duplicado, sumarlo igual
+                // el formato guarda el tamaño de la instrucción
+                if (tmpLine.error == "Símbolo duplicado" || tmpLine.error == null) tmpSeccion.tmpBloque.localCP += tmpLine.formato;
                 lineas.Add(tmpLine);
 
-                Console.WriteLine("Linea: " + tmpLine.line + " " + tmpLine.ins.GetText() + " " + tmpLine.opers.Count);
+                //Console.WriteLine("Linea: " + tmpLine.line + " " + tmpLine.ins.GetText() + " " + tmpLine.opers.Count);
             }
 
             // Añadir bloque a la lista
-            if (!bloques.Contains(tmpBloque))
-                bloques.Add(tmpBloque);
+            if (!tmpSeccion.bloques.Contains(tmpSeccion.tmpBloque))
+                tmpSeccion.bloques.Add(tmpSeccion.tmpBloque);
+
+            // Si no se añadió la sección, añadirla, en casi de que solo haya una sección
+            secciones.Add(tmpSeccion);
 
             tmpLine = new Linea();
-            tmpLine.cp = bloques[0].localCP;
-            tmpLine.bloque = bloques[0].num;
+            tmpLine.cp = secciones[0].bloques[0].localCP;
+            tmpLine.bloque = secciones[0].bloques[0].num;
             tmpLine.ins = tree.fin().END();
             tmpLine.opers = new List<ITerminalNode> { };
             tmpLine.line = numLine++;
+            tmpLine.seccion = secciones[0].num;
             if (tree.fin().ID() != null) tmpLine.opers.Add(tree.fin().ID());
             checkError();
             lineas.Add(tmpLine);
 
-
-            // Calcular direcciones de los bloques
-            for (int i = 0; i < bloques.Count; i++)
+            // Calcular direcciones de los bloques de todas las secciones
+            /*
+            for (int i = 0; i < tmpSeccion.bloques.Count; i++)
             {
-                bloques[i].lon = bloques[i].localCP;
+                tmpSeccion.bloques[i].lon = tmpSeccion.bloques[i].localCP;
                 if (i > 0)
-                    bloques[i].dir = bloques[i - 1].dir + bloques[i - 1].lon;
+                    tmpSeccion.bloques[i].dir = tmpSeccion.bloques[i - 1].dir + tmpSeccion.bloques[i - 1].lon;
+            }*/
+            foreach (Seccion sec in secciones)
+            {
+                for (int i = 0; i < sec.bloques.Count; i++)
+                {
+                    sec.bloques[i].lon = sec.bloques[i].localCP;
+                    if (i > 0)
+                        sec.bloques[i].dir = sec.bloques[i - 1].dir + sec.bloques[i - 1].lon;
+                }
             }
 
-            
+            // Setear definidos para cada sección
+            /*
+            foreach (var defs in definidos)
+            {
+                // Revisar si existe el símbolo
+                var sim = tmpSeccion.simbolos.Find(x => x.nombre == defs.GetText());
+                if (sim != null)
+                {
+                    sim.definido = true;
+                }
+                else
+                {
+                    tmpLine.error = "Símbolo no encontrado para definición externa";
+                }
+            }*/
+            foreach(var sec in secciones)
+            {
+                foreach (var defs in sec.definidos)
+                {
+                    // Revisar si existe el símbolo
+                    var sim = sec.simbolos.Find(x => x.nombre == defs.GetText());
+                    if (sim != null)
+                    {
+                        sim.definido = true;
+                    }
+                    else
+                    {
+                        tmpLine.error = "Símbolo no encontrado para definición externa";
+                    }
+                }
+            }
+
+
 
             // Función interna para que, de una cadena, con X'...' o C'...', se transforme a el tamaño en bytes
             int toBytes(string s)
@@ -787,27 +900,31 @@ namespace FSS_01
                 return false;
             }
 
-            void addToSymTable(string etq, string value, string type)
+            void addToSymTable(string etq, string value, string type, bool externo = false)
             {
                 // Si ya hay errores, no hacer nada
                 if (tmpLine.error != null) return;
                 Simbolo sim = new Simbolo();
                 sim.nombre = etq;
                 sim.tipo = type;
-                sim.bloque = tmpBloque.num;
-                //sim.expresion = value;
-                if (type != "EXP")
-                    sim.valor = Convert.ToInt32(value);
-                else
+                sim.bloque = tmpSeccion.tmpBloque.num;
+                sim.externo = externo;
+                sim.definido = false;
+                if (!externo)
                 {
-                    sim.expresion = value;
-                    var res = evalExpression(value, tmpLine);
-                    sim.valor = res.Item2;
-                    sim.tipo = res.Item1;
+                    if (type != "EXP")
+                        sim.valor = Convert.ToInt32(value);
+                    else
+                    {
+                        sim.expresion = value;
+                        var res = evalExpression(tmpSeccion, value, tmpLine);
+                        sim.valor = res.Item2;
+                        sim.tipo = res.Item1;
+                     }
                 }
                 // Verificar si no existe
-                if (simbolos.FindIndex(x => x.nombre == etq) == -1)
-                    simbolos.Add(sim);
+                if (tmpSeccion.simbolos.FindIndex(x => x.nombre == etq) == -1)
+                    tmpSeccion.simbolos.Add(sim);
                 else
                     tmpLine.error = "Símbolo duplicado";
             }
@@ -824,14 +941,15 @@ namespace FSS_01
             return Convert.ToInt32(s);
         }
 
-        private Tuple<string, int> evalExpression(string expr, Linea tmpLine, bool realDirs = false)
+        private Tuple<string, int> evalExpression(Seccion sec, string expr, Linea tmpLine, bool realDirs = false)
         {
             //Console.WriteLine("Evaluando expresión: " + expr);
             int res = -1;
             string tipo = "";
             string resalt = expr;
             int blk = -1;
-            foreach (var sim in simbolos)
+            int rels = 0;
+            foreach (var sim in sec.simbolos)
             {
                 // Revisar si si está en la expresión
                 string pattern = $@"\b{Regex.Escape(sim.nombre)}\b";
@@ -842,11 +960,23 @@ namespace FSS_01
                     if (expr.Contains(sim.nombre + " "))
                         continue;
 
-                    resalt = resalt.Replace(sim.nombre, sim.tipo);
+                    //resalt = resalt.Replace(sim.nombre, sim.tipo);
+                    if (sim.tipo != "-")
+                    {
+                        resalt = resalt.Replace(sim.nombre, sim.tipo);
+                        if (sim.tipo == "REL") rels++;
+                    }
+                    else
+                    {
+                        resalt = resalt.Replace(sim.nombre, "SE");
+                        tmpLine.modreg += "*SE ";
+                    }
+
+                    Console.WriteLine("RA- Reemplazando " + sim.nombre + " por " + sim.tipo);
                     if (sim.tipo == "REL" && realDirs)
                     {
-                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
-                        expr = expr.Replace(sim.nombre, (sim.valor + bloques.Find(x => x.num == sim.bloque).dir).ToString());
+                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + sec.bloques.Find(x => x.num == sim.bloque).dir).ToString());
+                        expr = expr.Replace(sim.nombre, (sim.valor + sec.bloques.Find(x => x.num == sim.bloque).dir).ToString());
                     }
                     else
                     {
@@ -861,6 +991,12 @@ namespace FSS_01
                         return new Tuple<string, int>("ABS", res);
                     }
                 }
+            }
+
+            // Si tiene por lo menos un *SE, y rels es impar, agregar 1 *R
+            if (resalt.Contains("SE") && rels % 2 == 1)
+            {
+                tmpLine.modreg += "*R ";
             }
 
             // Sin contiene h o H, transformar ese valor a entero
@@ -920,28 +1056,36 @@ namespace FSS_01
             resalt = resalt.Replace("+REL", "");
             posRel += Regex.Matches(resalt, "REL").Count;
 
-            if (posRel == 0 && negRel == 0 && posAbs > 0 && negAbs >= 0)
+            // Si contiene un SE, es un símbolo externo, no se revisan las reglas
+            if (!resalt.Contains("SE"))
             {
-                tipo = "ABS";
-            }
-            else
-            {
-                // Emparejar los términos relativos
-                int termRel = posRel - negRel;
-                if (termRel == 1)
-                {
-                    tipo = "REL";
-                }
-                else if (termRel == 0)
+                if (posRel == 0 && negRel == 0 && posAbs > 0 && negAbs >= 0)
                 {
                     tipo = "ABS";
                 }
                 else
                 {
-                    tmpLine.error = "Expresión inválida 3";
-                    tipo = "ABS";
-                    res = -1;
+                    // Emparejar los términos relativos
+                    int termRel = posRel - negRel;
+                    if (termRel == 1)
+                    {
+                        tipo = "REL";
+                    }
+                    else if (termRel == 0)
+                    {
+                        tipo = "ABS";
+                    }
+                    else
+                    {
+                        tmpLine.error = "Expresión inválida 3";
+                        tipo = "ABS";
+                        res = -1;
+                    }
                 }
+            }
+            else
+            {
+                tipo = "SE";
             }
             Console.WriteLine("Resultado: " + tipo + " " + res);
             return new Tuple<string, int>(tipo, res);
@@ -978,7 +1122,7 @@ namespace FSS_01
             return output;
         }
 
-        private string getTokenType(int type)
+        public string getTokenType(int type)
         {
             foreach (var rule in ruleList)
             {
@@ -1006,6 +1150,8 @@ namespace FSS_01
         public int formato { get; set; }
         public int bloque { get; set; }
         public bool realoc { get; set; }
+        public int seccion { get; set; }
+        public string modreg { get; set; } = "";
 
         public override String ToString()
         {
@@ -1025,6 +1171,60 @@ namespace FSS_01
         }
     }
 
+    public class Seccion
+    {
+        public int num { get; set; }
+        public List<Simbolo> simbolos = new List<Simbolo>();
+        public List<Bloque> bloques = new List<Bloque>();
+        public Table symTable;
+        public Table blockTable;
+        public Bloque tmpBloque;
+        public List<ITerminalNode> definidos = new List<ITerminalNode>();
+        public string objCode { get; set; } = "";
+
+        public void createTables()
+        {
+            symTable = new Table("Tabla de Símbolos");
+            List<String> symHeaders = new List<String> { "Nombre", "Valor", "Expresión", "Tipo", "Bloque", "Externo", "Definido" };
+            foreach (var header in symHeaders) symTable.dataGridView.Columns.Add(header, header);
+            foreach (var sim in simbolos)
+            {
+                var index = symTable.dataGridView.Rows.Add();
+                symTable.dataGridView.Rows[index].Cells[0].Value = sim.nombre;
+                symTable.dataGridView.Rows[index].Cells[1].Value = sim.valor.ToString("X").PadLeft(4, '0').Substring(sim.valor.ToString("X").PadLeft(4, '0').Length - 4);
+                symTable.dataGridView.Rows[index].Cells[2].Value = sim.expresion;
+                symTable.dataGridView.Rows[index].Cells[3].Value = sim.tipo;
+                symTable.dataGridView.Rows[index].Cells[4].Value = sim.bloque;
+                symTable.dataGridView.Rows[index].Cells[5].Value = sim.externo ? "Sí" : "No";
+                symTable.dataGridView.Rows[index].Cells[6].Value = sim.definido ? "Sí" : "No";
+
+            }
+
+
+            blockTable = new Table("Tabla de Bloques");
+            List<String> blockHeaders = new List<String> { "Número", "Nombre", "Longitud", "Dirección" };
+            foreach (var header in blockHeaders) blockTable.dataGridView.Columns.Add(header, header);
+            foreach (var block in bloques)
+            {
+                var index = blockTable.dataGridView.Rows.Add();
+                blockTable.dataGridView.Rows[index].Cells[0].Value = block.num;
+                blockTable.dataGridView.Rows[index].Cells[1].Value = block.nombre;
+                blockTable.dataGridView.Rows[index].Cells[2].Value = block.lon.ToString("X").PadLeft(4, '0').Substring(block.lon.ToString("X").PadLeft(4, '0').Length - 4);
+                blockTable.dataGridView.Rows[index].Cells[3].Value = block.dir.ToString("X").PadLeft(4, '0').Substring(block.dir.ToString("X").PadLeft(4, '0').Length - 4);
+            }
+
+            symTable.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+            symTable.dataGridView.AutoResizeColumns();
+            symTable.dataGridView.AutoResizeRows();
+            symTable.dataGridView.Refresh();
+
+            blockTable.dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+            blockTable.dataGridView.AutoResizeColumns();
+            blockTable.dataGridView.AutoResizeRows();
+            blockTable.dataGridView.Refresh();
+        }
+    }
+
     public class Simbolo
     {
         public string nombre { get; set; }
@@ -1032,6 +1232,8 @@ namespace FSS_01
         public string expresion { get; set; }
         public string tipo { get; set; }
         public int bloque { get; set; }
+        public bool externo { get; set; }
+        public bool definido { get; set; }
     }
 
     public class Bloque
