@@ -29,7 +29,7 @@ namespace FSS_01
         {
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
-            errores += $"Line {line}:{charPositionInLine} - {msg} - {offendingSymbol}\n";
+            errores += $"Line {line}:{charPositionInLine} - {msg}\n";
             errorsLines.Add(new Tuple<int, string>(line, msg));
             errorsLinesObj.Add(new Tuple<int, IToken>(line, offendingSymbol));
             c++;
@@ -70,7 +70,7 @@ namespace FSS_01
         {
             // Manejar el error según tus necesidades
             //Console.WriteLine($"Línea {line}:{charPositionInLine} - {msg}");
-            errores += $"Line {line}:{charPositionInLine} - {msg} - {offendingSymbol}\n";
+            errores += $"Line {line}:{charPositionInLine} - {msg}\n";
             errorsLines.Add(new Tuple<int, string>(line, msg));
             errorsLinesObj.Add(new Tuple<int, int>(line, offendingSymbol));
             c++;

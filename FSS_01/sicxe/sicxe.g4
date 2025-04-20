@@ -20,7 +20,7 @@ proposicion     :   directiva
                 ;
 
 
-directiva       :   ID CSECT 
+directiva       :   etiqueta CSECT 
                 |   EXTDEF ID (',' ID)*
                 |   EXTREF ID (',' ID)*
                 |   etiqueta? (RESB | RESW) NUM

@@ -10,6 +10,7 @@ using Antlr4.Runtime.Tree;
 using System.Data;
 using System.Text.RegularExpressions;
 using FSS_01.sicxe;
+using System.IO.Packaging;
 
 namespace FSS_01
 {
@@ -25,8 +26,8 @@ namespace FSS_01
         // Parser para el código fuente
         private sicxeParser parser;
         // Listeners para errores
-        private ErrorParserListener parslistener;
-        private ErrorLexerListener lexelistener;
+        public ErrorParserListener parslistener;
+        public ErrorLexerListener lexelistener;
         // Árbol de análisis sintáctico
         private sicxeParser.ProgContext tree;
         // Variables de estado
@@ -135,90 +136,152 @@ namespace FSS_01
         {
             if (step == 0) procLines();
             createObjectCode();
-            //createObjectProgram();
+            createObjectProgram();
             createTables();
 
             alreadyCompiled = true;
             date = DateTime.Now;
             // Imprimir todos los errores
-            Console.WriteLine("Errores léxicos: " + lexelistener.getErroresCount());
-            Console.WriteLine(lexelistener.getErrores());
-            Console.WriteLine("Errores sintácticos: " + parslistener.getErroresCount());
-            Console.WriteLine(parslistener.getErrores());
+            //+-Console.WriteLine("Errores léxicos: " + lexelistener.getErroresCount());
+            //+-Console.WriteLine(lexelistener.getErrores());
+            //+-Console.WriteLine("Errores sintácticos: " + parslistener.getErroresCount());
+            //+-Console.WriteLine(parslistener.getErrores());
 
             // Imprimir árbol de análisis sintáctico
-            Console.WriteLine(tree.ToStringTree(parser));
+            //+-Console.WriteLine(tree.ToStringTree(parser));
         }
 
-        /*
+        
         private void createObjectProgram()
         {
-            // Instrucciones de corte
-            List<String> cuts = new List<String> { "ORG", "RESW", "RESB", "USE", "END" };
-            String objProg = "H";
-            // Nombre del programa a 6 caracteres
-            objProg += lineas[0].etq.GetText().PadRight(6, ' ').Substring(0, 6);
-            // Dirección de inicio (del primer bloque)
-            objProg += bloques[0].dir.ToString("X").PadLeft(6, '0');
-            // Longitud del programa
-            int progLen = bloques[bloques.Count - 1].dir + bloques[bloques.Count - 1].lon - bloques[0].dir;
-            objProg += progLen.ToString("X").PadLeft(6, '0');
-            objProg += "\n";
-            int lenght = 0;
-            String tmp = "";
-            String inic = "";
-            int primeraInstr = -1;
-            foreach (Linea linea in lineas)
+            foreach (Seccion sec in secciones)
             {
-                //Si es una instrucción valida, no una directiva, se actualiza primeraInstr
-                if(opers.Find(x => x.Item1 == linea.ins.GetText()) != null && primeraInstr == -1)
-                    primeraInstr = linea.cp + bloques[linea.bloque].dir;
+                List<Linea> lineasec = lineas.FindAll(x => x.seccion == sec.num);
+                // Instrucciones de corte
+                List<String> cuts = new List<String> { "ORG", "RESW", "RESB", "USE", "END" };
+                String objProg = "H";
+                // Nombre del programa a 6 caracteres
+                objProg += lineasec[0].etq.GetText().PadRight(6, ' ').Substring(0, 6);
+                // Dirección de inicio (del primer bloque)
+                objProg += sec.bloques[0].dir.ToString("X").PadLeft(6, '0');
+                // Longitud del programa
+                int progLen = sec.bloques[sec.bloques.Count - 1].dir + sec.bloques[sec.bloques.Count - 1].lon - sec.bloques[0].dir;
+                objProg += progLen.ToString("X").PadLeft(6, '0');
+                objProg += "\n";
 
-                if (cuts.Contains(linea.ins.GetText()) && tmp != "")
-                { 
+                // Obtener todas las lineas de código de la sección con EXTREF y EXTDEF
+                List<Linea> refslns = lineasec.FindAll(x => x.ins.GetText() == "EXTREF" || x.ins.GetText() == "EXTDEF");
+                foreach(Linea line in refslns)
+                {
+                    // Si es EXTDEF
+                    if (line.ins.GetText() == "EXTDEF")
+                    {
+                        objProg += "D";
+                        foreach (ITerminalNode op in line.opers)
+                        {
+                            var sim = sec.simbolos.Find(x => x.nombre == op.GetText());
+                            objProg += sim.nombre.PadRight(6, ' ').Substring(0, 6) + (sim.valor + sec.bloques[sim.bloque].dir).ToString("X").PadLeft(6, '0');    
+                        }
+                        objProg += "\n";
+                    }
+                    else if (line.ins.GetText() == "EXTREF")
+                    {
+                        objProg += "R";
+                        foreach (ITerminalNode op in line.opers)
+                        {
+                            var sim = sec.simbolos.Find(x => x.nombre == op.GetText());
+                            objProg += sim.nombre.PadRight(6, ' ').Substring(0, 6);
+                        }
+                        objProg += "\n";
+                    }
+                }
+
+                int lenght = 0;
+                String tmp = "";
+                String inic = "";
+                int primeraInstr = -1;
+                foreach (Linea linea in lineasec)
+                {
+                    Console.WriteLine(linea.ToString());
+                    //Si es una instrucción valida, no una directiva, se actualiza primeraInstr
+                    if (opers.Find(x => x.Item1 == linea.ins.GetText()) != null && primeraInstr == -1)
+                        primeraInstr = linea.cp + sec.bloques[linea.bloque].dir;
+
+                    if (cuts.Contains(linea.ins.GetText()) && tmp != "")
+                    { 
+                        objProg += "T" + inic + lenght.ToString("X").PadLeft(2, '0') + tmp + "\n";
+                        tmp = "";
+                        lenght = 0;
+                    }
+                    else if (linea.codobj != null)
+                    {
+                        if (tmp == "")
+                            inic = (linea.cp + sec.bloques[linea.bloque].dir).ToString("X").PadLeft(6, '0');
+                        tmp += linea.codobj;
+                        lenght += linea.formato;
+                    }
+                }
+                // En caso de que no se haya añadido un corte, se añade el último
+                if (tmp != "")
+                {
                     objProg += "T" + inic + lenght.ToString("X").PadLeft(2, '0') + tmp + "\n";
                     tmp = "";
                     lenght = 0;
                 }
-                else if (linea.codobj != null)
+
+                List<Linea> realoc = lineasec.FindAll(x => x.realoc || x.realregmode.Count > 0);
+                foreach (Linea line in realoc)
                 {
-                    if (tmp == "")
-                        inic = (linea.cp + bloques[linea.bloque].dir).ToString("X").PadLeft(6, '0');
-                    tmp += linea.codobj;
-                    lenght += linea.formato;
+                    if (line.realregmode.Count != 0)
+                    {
+                        foreach(String regm in line.realregmode)
+                        {
+                            var regm2 = regm.Replace("[PNAME]", lineasec[0].etq.GetText()).PadRight(6, ' ').Substring(0, 6);
+                            if (line.ins.GetText() == "WORD")
+                                objProg += "M" + (line.cp + sec.bloques[line.bloque].dir).ToString("X").PadLeft(6, '0') + "06" + regm2 + "\n";
+                            else
+                                objProg += "M" + (line.cp + sec.bloques[line.bloque].dir + 1).ToString("X").PadLeft(6, '0') + "05" + regm2 + "\n";
+                        }
+                    }
+                    /*
+                    if (line.realoc) 
+                    { 
+                        // Si es word, se crea un registro de realocación desde su dirección, en 6 medios bytes + Nombre de programa
+                        // Cualquier otro caso, se crea un registro de realocación desde su dirección + 1 en 5 medios bytes + Nombre de programa
+                        if (line.ins.GetText() == "WORD")
+                            objProg += "M" + (line.cp + sec.bloques[line.bloque].dir).ToString("X").PadLeft(6, '0') + "06+";
+                        else
+                            objProg += "M" + (line.cp + sec.bloques[line.bloque].dir + 1).ToString("X").PadLeft(6, '0') + "05+";
+
+                        objProg +=  + "\n";
+                    }*/
                 }
-            }
 
-            List<Linea> realoc = lineas.FindAll(x => x.realoc);
-            foreach (Linea line in realoc)
-            {
-                // Si es word, se crea un registro de realocación desde su dirección, en 6 medios bytes + Nombre de programa
-                // Cualquier otro caso, se crea un registro de realocación desde su dirección + 1 en 5 medios bytes + Nombre de programa
-                if (line.ins.GetText() == "WORD")
-                    objProg += "M" + (line.cp + bloques[line.bloque].dir).ToString("X").PadLeft(6, '0') + "06+";
-                else
-                    objProg += "M" + (line.cp + bloques[line.bloque].dir + 1).ToString("X").PadLeft(6, '0') + "05+";
-                objProg += lineas[0].etq.GetText().PadRight(6, ' ').Substring(0, 6) + "\n";
-            }
-
-            // Si hay un END, se crea un registro de finalización
-            if (lineas[lineas.Count - 1].ins.GetText() == "END"){
-                if (lineas[lineas.Count - 1].error != null) objProg += "EFFFFFF";
-                // Si tiene operando es una etiqueta, se busca su valor en la tabla de símbolos
-                else if (lineas[lineas.Count - 1].opers.Count > 0)
+                // Si hay un END, se crea un registro de finalización
+                if (lineasec[lineasec.Count - 1].ins.GetText() == "END"){
+                    if (lineasec[lineasec.Count - 1].error != null) objProg += "EFFFFFF";
+                    // Si tiene operando es una etiqueta, se busca su valor en la tabla de símbolos
+                    else if (lineasec[lineasec.Count - 1].opers.Count > 0)
+                    {
+                        var sim = sec.simbolos.Find(x => x.nombre == lineasec[lineasec.Count - 1].opers[0].GetText());
+                        if (sim != null)
+                            objProg += "E" + (sim.valor + sec.bloques[sim.bloque].dir).ToString("X").PadLeft(6, '0');
+                    }
+                    else
+                        objProg += "E" + primeraInstr.ToString("X").PadLeft(6, '0');
+                }
+                // Si no, pero, es una seccion diferente de la 0
+                else if (lineasec[lineasec.Count - 1].seccion != 0)
                 {
-                    var sim = simbolos.Find(x => x.nombre == lineas[lineas.Count - 1].opers[0].GetText());
-                    if (sim != null)
-                        objProg += "E" + (sim.valor + bloques[sim.bloque].dir).ToString("X").PadLeft(6, '0');
+                    objProg += "E";
                 }
-                else
-                    objProg += "E" + primeraInstr.ToString("X").PadLeft(6, '0');
-            }
 
-            this.programObj = objProg;
+                //this.programObj = objProg;
+                sec.objCode = objProg;
+
+            }
         }
-        */
-
+        
         private void createObjectCode()
         {
             int baseReg = -1;
@@ -286,7 +349,7 @@ namespace FSS_01
                                         break;
                                     }
                                 }
-                                Console.WriteLine("X: " + x);
+                                //+-Console.WriteLine("X: " + x);
                                 // Calcular dirección
                                 int dir = 0;
                                 if (line.opers.Count > 0)
@@ -298,8 +361,8 @@ namespace FSS_01
                                     else
                                         evalres = evalExpression(secciones[line.seccion], line.opers[0].GetText(), line, true);
 
-                                    Console.WriteLine(line.ToString());
-                                    Console.WriteLine("Evalres: " + evalres.Item1 + " " + evalres.Item2);
+                                    //+-Console.WriteLine(line.ToString());
+                                    //+-Console.WriteLine("Evalres: " + evalres.Item1 + " " + evalres.Item2);
 
                                     // Si es ABS y está entre 0 y 4095 es c
                                     if (evalres.Item1 == "ABS" && evalres.Item2 >= 0 && evalres.Item2 <= 4095 && line.formato == 3)
@@ -415,7 +478,7 @@ namespace FSS_01
                     }
                     else if (line.ins.GetText() == "END" && line.opers.Count > 0)
                     {
-                        Console.WriteLine("End: " + line.opers.Count);
+                        //+-Console.WriteLine("End: " + line.opers.Count);
                         // Revisar que exista el id en tabsim
                         string val = line.opers[0].GetText();
                         var sim = secciones[line.seccion].simbolos.Find(x => x.nombre == val);
@@ -507,6 +570,7 @@ namespace FSS_01
             // Crear lineas de código
             Linea tmpLine = new Linea();
             //tree.inicio().etiqueta();
+            tmpSeccion.nombre = tree.inicio().etiqueta();
             tmpLine.etq = tree.inicio().etiqueta();
             tmpLine.ins = tree.inicio().START();
             tmpLine.opers = new List<ITerminalNode> { tree.inicio().NUM() };
@@ -670,7 +734,7 @@ namespace FSS_01
                     } 
                     else if (lineaDirect.CSECT() != null)
                     {
-                        Console.WriteLine("CSECT");
+                        //+-Console.WriteLine("CSECT");
                         tmpLine.ins = lineaDirect.CSECT();
                         // Se añade bloque a la lista
                         if (!tmpSeccion.bloques.Contains(tmpSeccion.tmpBloque))
@@ -683,6 +747,8 @@ namespace FSS_01
                         // Se crea una nueva sección
                         tmpSeccion = new Seccion();
                         tmpSeccion.tmpBloque = new Bloque();
+                        tmpSeccion.nombre = lineaDirect.etiqueta();
+
 
                         // Bloques
                         tmpSeccion.tmpBloque.dir = 0;
@@ -796,7 +862,7 @@ namespace FSS_01
                 if (tmpLine.error == "Símbolo duplicado" || tmpLine.error == null) tmpSeccion.tmpBloque.localCP += tmpLine.formato;
                 lineas.Add(tmpLine);
 
-                //Console.WriteLine("Linea: " + tmpLine.line + " " + tmpLine.ins.GetText() + " " + tmpLine.opers.Count);
+                ////+-Console.WriteLine("Linea: " + tmpLine.line + " " + tmpLine.ins.GetText() + " " + tmpLine.opers.Count);
             }
 
             // Añadir bloque a la lista
@@ -943,12 +1009,14 @@ namespace FSS_01
 
         private Tuple<string, int> evalExpression(Seccion sec, string expr, Linea tmpLine, bool realDirs = false)
         {
-            //Console.WriteLine("Evaluando expresión: " + expr);
+            ////+-Console.WriteLine("Evaluando expresión: " + expr);
             int res = -1;
             string tipo = "";
             string resalt = expr;
             int blk = -1;
             int rels = 0;
+
+            List<Tuple<string, int>> regmode = new List<Tuple<string, int>>();
             foreach (var sim in sec.simbolos)
             {
                 // Revisar si si está en la expresión
@@ -968,19 +1036,40 @@ namespace FSS_01
                     }
                     else
                     {
+                        Console.WriteLine("Simbolo externo: " + sim.nombre);
+
+                        // Extraer operandos: números y símbolos
+                        string patternoprs = @"\b[0-9A-Fa-f]+[hH]?\b|\b[0-9]+\b|\b[A-Za-z_][A-Za-z0-9_]*\b";
+                        MatchCollection matches = Regex.Matches(expr, patternoprs);
+
+                        // Buscar el índice del símbolo en la lista de operandos
+                        int operandIndex = -1;
+                        for (int i = 0; i < matches.Count; i++)
+                        {
+                            if (matches[i].Value == sim.nombre)
+                            {
+                                operandIndex = i;
+                                break; // Solo la primera aparición
+                            }
+                        }
+
+                        Console.WriteLine("Número de operando: " + operandIndex);
+
+                        regmode.Add(new Tuple<string, int>(sim.nombre, operandIndex));
+
                         resalt = resalt.Replace(sim.nombre, "SE");
                         tmpLine.modreg += "*SE ";
                     }
 
-                    Console.WriteLine("RA- Reemplazando " + sim.nombre + " por " + sim.tipo);
+                    //+-Console.WriteLine("RA- Reemplazando " + sim.nombre + " por " + sim.tipo);
                     if (sim.tipo == "REL" && realDirs)
                     {
-                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + sec.bloques.Find(x => x.num == sim.bloque).dir).ToString());
+                        //+-Console.WriteLine("Reemplazando " + sim.nombre + " por " + (sim.valor + sec.bloques.Find(x => x.num == sim.bloque).dir).ToString());
                         expr = expr.Replace(sim.nombre, (sim.valor + sec.bloques.Find(x => x.num == sim.bloque).dir).ToString());
                     }
                     else
                     {
-                        Console.WriteLine("Reemplazando " + sim.nombre + " por " + sim.valor.ToString());
+                        //+-Console.WriteLine("Reemplazando " + sim.nombre + " por " + sim.valor.ToString());
                         expr = expr.Replace(sim.nombre, sim.valor.ToString());
                     }
                     if (blk == -1) blk = sim.bloque;
@@ -996,6 +1085,7 @@ namespace FSS_01
             // Si tiene por lo menos un *SE, y rels es impar, agregar 1 *R
             if (resalt.Contains("SE") && rels % 2 == 1)
             {
+                tmpLine.realoc = true;
                 tmpLine.modreg += "*R ";
             }
 
@@ -1008,7 +1098,7 @@ namespace FSS_01
                 resalt = Regex.Replace(resalt, patternhex, m => Convert.ToInt32(m.Value.Substring(0, m.Value.Length - 1), 16).ToString());
             
 
-            Console.WriteLine("Expresión: " + expr);
+            //+-Console.WriteLine("Expresión: " + expr);
             if (expr.Contains("+") || expr.Contains("-") || expr.Contains("*") || expr.Contains("/"))
             {
                 try
@@ -1038,9 +1128,27 @@ namespace FSS_01
                 }
             }
 
-            Console.WriteLine("Pre evaluación: " + resalt);
+            //+-Console.WriteLine("Pre evaluación: " + resalt);
             resalt = ExpressionTransformer.Transform(resalt);
-            Console.WriteLine("Expresión transformada: " + resalt);
+            //+-Console.WriteLine("Expresión transformada: " + resalt);
+
+            // Obtener todos los operandos con su signo
+            // regex, solo pueden ser palabras y signos +, -
+            string pattern2 = @"[+-]?\b[A-Za-z_][A-Za-z0-9_]*\b";
+            MatchCollection matches2 = Regex.Matches(resalt, pattern2);
+
+            // Lista temporal 
+            // Recorrer regmode
+            foreach (var reg in regmode)
+            {
+                // obtener la match con el indice de la lista sobre match2
+                Console.WriteLine("Reg: " + reg.Item1 + " " + matches2[reg.Item2].Value);
+                if (matches2[reg.Item2].Value.Contains("-"))
+                    tmpLine.realregmode.Add("-" + reg.Item1);
+                else
+                    tmpLine.realregmode.Add("+" + reg.Item1);
+                Console.WriteLine("Regmode: " + tmpLine.realregmode[tmpLine.realregmode.Count - 1]);
+            }
 
             int negAbs = Regex.Matches(resalt, "\\-ABS").Count;
             resalt = resalt.Replace("-ABS", "");
@@ -1086,8 +1194,13 @@ namespace FSS_01
             else
             {
                 tipo = "SE";
+                if (tmpLine.realoc)
+                {
+                    string val = ((negRel - posRel) == 1) ? "-" : "+";
+                    tmpLine.realregmode.Add(val + "[PNAME]");
+                }
             }
-            Console.WriteLine("Resultado: " + tipo + " " + res);
+            //+-Console.WriteLine("Resultado: " + tipo + " " + res);
             return new Tuple<string, int>(tipo, res);
         }
 
@@ -1153,6 +1266,8 @@ namespace FSS_01
         public int seccion { get; set; }
         public string modreg { get; set; } = "";
 
+        public List<string> realregmode = new List<string>();
+
         public override String ToString()
         {
             String res = "";
@@ -1173,6 +1288,7 @@ namespace FSS_01
 
     public class Seccion
     {
+        public sicxeParser.EtiquetaContext nombre { get; set; }
         public int num { get; set; }
         public List<Simbolo> simbolos = new List<Simbolo>();
         public List<Bloque> bloques = new List<Bloque>();

@@ -36,7 +36,13 @@ namespace FSS_01.vistas
 
             comp = new CompiladorSx();
             
-            string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\AEA\\p02.asm";
+            
+
+        }
+
+        private void openFromFile(string path)
+        {
+            //string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\AEA\\p02.asm";
             comp.loadCode(path);
             comp.compile();
             setRichTextBoxCode();
@@ -70,34 +76,33 @@ namespace FSS_01.vistas
             splitContainer2.Panel2.Controls.Add(tab.tabControl);
             for (int i = 0; i < comp.secciones.Count; i++)
             {
-                // Crear splitContainer vertical
-                SplitContainer splitContainer = new SplitContainer();
-                splitContainer.Dock = DockStyle.Fill;
-                splitContainer.Orientation = Orientation.Horizontal;
-                splitContainer.SplitterDistance = 200;
-                // Crear groupBox para Tabla de Simbolos
+                // Crear SplitContainer principal (dividir en 1/3 y 2/3)
+                SplitContainer splitContainer1 = new SplitContainer();
+                splitContainer1.Dock = DockStyle.Fill;
+                splitContainer1.Orientation = Orientation.Horizontal;
+
+                // Crear SplitContainer secundario (dividir los 2/3 en 1/2 y 1/2)
+                SplitContainer splitContainer2 = new SplitContainer();
+                splitContainer2.Dock = DockStyle.Fill;
+                splitContainer2.Orientation = Orientation.Horizontal;
+
+                // === Tabla de Símbolos ===
                 GroupBox groupBox1 = new GroupBox();
-                groupBox1.Text = "Tabla de Simbolos - Sección " + i;
+                groupBox1.Text = "Tabla de Símbolos - Sección " + i;
                 groupBox1.Dock = DockStyle.Fill;
                 groupBox1.Controls.Add(comp.secciones[i].symTable.dataGridView);
-                // Crear groupBox para Tabla de Bloques
+
+                // === Tabla de Bloques ===
                 GroupBox groupBox2 = new GroupBox();
                 groupBox2.Text = "Tabla de Bloques - Sección " + i;
                 groupBox2.Dock = DockStyle.Fill;
                 groupBox2.Controls.Add(comp.secciones[i].blockTable.dataGridView);
-                // Agregar groupBox al panel superior del splitContainer
-                splitContainer.Panel1.Controls.Add(groupBox1);
-                // Crear otro splitContainer para el codigo obj de la seccion
-                SplitContainer splitContainer2 = new SplitContainer();
-                splitContainer2.Dock = DockStyle.Fill;
-                splitContainer2.Orientation = Orientation.Horizontal;
-                splitContainer2.SplitterDistance = 200;
-                splitContainer2.Panel1.Controls.Add(groupBox2);
-                // Crear groupBox para el codigo obj
+
+                // === Código Objeto ===
                 GroupBox groupBox3 = new GroupBox();
                 groupBox3.Text = "Código Objeto - Sección " + i;
                 groupBox3.Dock = DockStyle.Fill;
-                // Crear RichTextBox para el codigo obj
+
                 RichTextBox rtb = new RichTextBox();
                 rtb.Dock = DockStyle.Fill;
                 rtb.Text = comp.secciones[i].objCode;
@@ -105,14 +110,28 @@ namespace FSS_01.vistas
                 rtb.SelectionColor = Color.Black;
                 rtb.SelectionTabs = new int[] { 50, 100, 150, 200 };
                 rtb.ReadOnly = true;
+
                 groupBox3.Controls.Add(rtb);
-                // Agregar groupBox al panel inferior del splitContainer
-                splitContainer2.Panel2.Controls.Add(groupBox3);
-                // Agregar el splitContainer al panel inferior del splitContainer
-                splitContainer.Panel2.Controls.Add(splitContainer2);
-                // Crear tabPage para la seccion
-                TabPage tabPage = new TabPage("Sección " + i);
-                tabPage.Controls.Add(splitContainer);
+
+                // Armar SplitContainers
+                splitContainer2.Panel1.Controls.Add(groupBox2);  // 2/3 arriba - bloques
+                splitContainer2.Panel2.Controls.Add(groupBox3);  // 2/3 abajo - obj code
+
+                splitContainer1.Panel1.Controls.Add(groupBox1);      // 1/3 símbolos
+                splitContainer1.Panel2.Controls.Add(splitContainer2); // 2/3 resto
+
+                // Crear tabPage y agregar el contenedor principal
+                TabPage tabPage = new TabPage("Sección " + i + " - " + comp.secciones[i].nombre.GetText());
+                tabPage.Controls.Add(splitContainer1);
+
+                // Ajustar dinámicamente el tamaño vertical a 1/3 para cada parte
+                tabPage.Resize += (sender, e) =>
+                {
+                    int totalHeight = tabPage.Height;
+                    splitContainer1.SplitterDistance = totalHeight / 3;
+                    splitContainer2.SplitterDistance = (totalHeight * 2 / 3) / 2;
+                };
+
                 // Agregar tabPage al tabControl
                 tab.tabControl.TabPages.Add(tabPage);
             }
@@ -122,27 +141,15 @@ namespace FSS_01.vistas
         {
             if (e.KeyCode == Keys.F4)
             {
+                Console.WriteLine("F4 pressed");
                 e.SuppressKeyPress = true;
-
-                // Guardamos la posición inicial del cursor
-                int selectionStart = richTextBox1.SelectionStart;
-                int lineIndex = richTextBox1.GetLineFromCharIndex(selectionStart); // Obtener la línea actual
 
                 // Primero procesamos el código
                 string code = richTextBox1.Text;
                 comp.setCode(code);
                 comp.procLines();
 
-                // Ahora insertamos un salto de línea (sin sobrescribir el texto)
-                richTextBox1.AppendText(Environment.NewLine);
-
-                // Restauramos la posición del cursor después del salto de línea
-                richTextBox1.SelectionStart = richTextBox1.GetFirstCharIndexFromLine(lineIndex) + Environment.NewLine.Length;
-                richTextBox1.SelectionLength = 0;
-
-                // Actualizamos el RichTextBox después de procesar el texto
                 setRichTextBoxCode();
-
                 e.Handled = true;
             }
         }
@@ -229,6 +236,11 @@ namespace FSS_01.vistas
                         richTextBox1.Select(start, length);
                         richTextBox1.SelectionBackColor = Color.FromArgb(255, 200, 200); // Rojo claro, personalizable
                     }
+
+
+                    richTextBox4.Clear();
+                    richTextBox4.AppendText(comp.lexelistener.getErrores());
+                    richTextBox4.AppendText(comp.parslistener.getErrores());
 
                 }
 

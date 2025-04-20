@@ -10,11 +10,11 @@ FIRST   LDX     #0
 COUNT   RESW    1                   
 TABLE   RESB    4096            
 TOTAL   RESW    1            
-        PROG1   CSECT           	
+PROG1   CSECT           	
 EXTDEF  NUM1, TABLE2          	
 EXTREF  COUNT, TABLE          	
         LDB     #TABLE2          
 NUM1    RESW    1                  	
 TABLE2  RESB    4096          	
-TOTAL   WORD    COUNT-TABLE+NUM1       
+TOTAL   WORD    COUNT+NUM1-TABLE
         END     FIRST 
