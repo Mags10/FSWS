@@ -28,6 +28,7 @@ namespace FSS_01.vistas
         const int WM_VSCROLL = 0x115;
         const int SB_THUMBPOSITION = 4;
 
+        private bool beautify = false;
 
         public mainView()
         {
@@ -35,37 +36,69 @@ namespace FSS_01.vistas
             richTextBox1.VScroll += (s, e) => SyncScroll(richTextBox1, richTextBox3);
 
             comp = new CompiladorSx();
-            
-            
+
+            // Obtener directorio de test
+            string testDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "../../tests");
+            // Obtener estructura de directorios y archivos asm, ponerlo en ejemplosToolStripMenuItem en forma de submenú
+            // Si hay subdirectorios, crear un submenú por cada uno
+
+            string[] subDirs = System.IO.Directory.GetDirectories(testDir);
+            foreach (string subDir in subDirs)
+            {
+                string dirName = System.IO.Path.GetFileName(subDir);
+                ToolStripMenuItem subMenu = new ToolStripMenuItem(dirName);
+                ejemplosToolStripMenuItem.DropDownItems.Add(subMenu);
+                // Obtener archivos asm en el subdirectorio
+                string[] asmFiles = System.IO.Directory.GetFiles(subDir, "*.asm");
+                foreach (string asmFile in asmFiles)
+                {
+                    string fileName = System.IO.Path.GetFileName(asmFile);
+                    ToolStripMenuItem fileMenuItem = new ToolStripMenuItem(fileName);
+                    fileMenuItem.Click += (s, e) => openFromFile(asmFile);
+                    subMenu.DropDownItems.Add(fileMenuItem);
+                }
+            }
 
         }
 
-        private void openFromFile(string path)
+        public void codObjGen()
         {
-            //string path = "E:\\source\\Mags10\\FSWS\\FSS_01\\tests\\AEA\\p02.asm";
-            comp.loadCode(path);
-            comp.compile();
-            setRichTextBoxCode();
-            /*
-            tab.addTab("Tabla Intermedia", comp.midFile.dataGridView);
-            for (int i = 0; i < comp.secciones.Count; i++)
-            {
-                tab.addTab("Tabla de Simbolos " + i, comp.secciones[i].symTable.dataGridView);
-                tab.addTab("Tabla de Bloques " + i, comp.secciones[i].blockTable.dataGridView);
-            }
-            RichTextBox rtb = new RichTextBox();
-            rtb.Dock = DockStyle.Fill;
-            rtb.Text = comp.programObj;
-            tab.addTab("Código Fuente", rtb);
-            this.splitContainer3.Panel1.Controls.Add(tab.tabControl);*/
+            toolStripStatusLabel1.Text = "Generando código objeto...";
+            segundoPaso(false);
+            toolStripStatusLabel1.Text = comp.thirdStepExec();
+            refreshDashboard();
+        }
 
+        public void segundoPaso(bool update = true)
+        {
+            if (update) toolStripStatusLabel1.Text = "Ejecutando segundo paso...";
+            primerPaso(false);
+            toolStripStatusLabel1.Text = comp.secondStepExec();
+            if (update) refreshDashboard();
+        }
+
+        public void primerPaso(bool update = true)
+        {
+            if (update) toolStripStatusLabel1.Text = "Ejecutando primer paso...";
+            comp.setCode(richTextBox1.Text);
+            toolStripStatusLabel1.Text = comp.firstStepExec();
+            if(update) refreshDashboard();
+        }
+
+        public void refreshDashboard()
+        {
+            analisisLexSic();
+            comp.createTables();
+            splitContainer1.Panel2Collapsed = false;
             // Crear groupBox para Tabla intermedia
             GroupBox groupBox = new GroupBox();
             groupBox.Text = "Tabla Intermedia";
             groupBox.Dock = DockStyle.Fill;
             // refrescar el tamaño de las columnas para que se aplique el ancho fijo
             comp.midFile.dataGridView.Refresh();
+            groupBox.Controls.Clear();
             groupBox.Controls.Add(comp.midFile.dataGridView);
+            splitContainer2.Panel1.Controls.Clear();
             splitContainer2.Panel1.Controls.Add(groupBox);
 
             // crear un una vista de tabs segun la cantidad de secciones
@@ -73,6 +106,7 @@ namespace FSS_01.vistas
             // Va en el panel 2 del splitContainer3
             tabView tab = new tabView("Tablas de Simbolos y Bloques");
             tab.Dock = DockStyle.Fill;
+            splitContainer2.Panel2.Controls.Clear();
             splitContainer2.Panel2.Controls.Add(tab.tabControl);
             for (int i = 0; i < comp.secciones.Count; i++)
             {
@@ -98,7 +132,7 @@ namespace FSS_01.vistas
                 groupBox2.Dock = DockStyle.Fill;
                 groupBox2.Controls.Add(comp.secciones[i].blockTable.dataGridView);
 
-                // === Código Objeto ===
+                // === Código Objeto (visualizar) ===
                 GroupBox groupBox3 = new GroupBox();
                 groupBox3.Text = "Código Objeto - Sección " + i;
                 groupBox3.Dock = DockStyle.Fill;
@@ -135,31 +169,24 @@ namespace FSS_01.vistas
                 // Agregar tabPage al tabControl
                 tab.tabControl.TabPages.Add(tabPage);
             }
+            splitContainer1.Panel1.Refresh();
+            splitContainer1.Panel2.Refresh();
+            splitContainer2.Panel1.Refresh();
+            splitContainer2.Panel2.Refresh();
         }
 
-        private void richTextBox1_KeyDown(object sender, KeyEventArgs e)
+        private void analisisLexSic()
         {
-            if (e.KeyCode == Keys.F4)
-            {
-                Console.WriteLine("F4 pressed");
-                e.SuppressKeyPress = true;
-
-                // Primero procesamos el código
-                string code = richTextBox1.Text;
-                comp.setCode(code);
-                comp.procLines();
-
-                setRichTextBoxCode();
-                e.Handled = true;
-            }
-        }
-        private void setRichTextBoxCode()
-        {
+            if (beautify) return;
             try
             {
+                string code = richTextBox1.Text;
+                comp.setCode(code);
+                comp.firstStepExec();
+
                 // 1) Preparar RichTextBox
                 richTextBox1.Clear();
-                richTextBox1.Font = new Font("Consolas", 10);                              // Monoespaciada :contentReference[oaicite:6]{index=6}
+                richTextBox1.Font = new Font("Consolas", 10);
                 richTextBox1.SelectionColor = Color.Black;
 
                 // 2) Medir anchos de columna
@@ -191,6 +218,13 @@ namespace FSS_01.vistas
                     else
                         richTextBox1.SelectionColor = Color.Black;
                     richTextBox1.AppendText(insText);
+
+                    // Modo de direccionamiento 
+                    if (line.modo != null)
+                    {
+                        string modoText = line.modo == "Inmediato" ? "#" : line.modo == "Indirecto" ? "@" : "";
+                        richTextBox1.AppendText(modoText);
+                    }
 
                     // --- OPERANDOS ---
                     foreach (var oper in line.opers.Where(o => o != null))
@@ -247,6 +281,7 @@ namespace FSS_01.vistas
                 // 6) Llevar caret al final
                 richTextBox1.SelectionStart = richTextBox1.TextLength;
                 richTextBox1.ScrollToCaret();
+                beautify = true;
             }
             catch (Exception ex)
             {
@@ -254,32 +289,18 @@ namespace FSS_01.vistas
             }
         }
 
-
-        // Helpers
         private bool IsCodop(int type)
         {
-            return type == 19 || type == 20 || type == 21 || type == 22 || type == 23; // CODOPs
+            return type == 19 || type == 20 || type == 21 || type == 22 || type == 23;
         }
 
-        // Método para verificar si el tipo es una directiva
         private bool IsDirective(int type)
         {
-            return type >= 2 && type <= 16; // Directivas (RESB, RESW, WORD, BYTE, EQU, BASE, etc.)
+            return type >= 2 && type <= 16;
         }
-
-
-        private void richTextBox1_TextChanged(object sender, EventArgs e)
-        {
-        }
-
-        private void toolStrip1_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
-        {
-
-        }
-
         private void richTextBox1_TextChanged_1(object sender, EventArgs e)
         {
-            // Dar el mismo formato al richTextBox2
+            isSaved = false;
             richTextBox3.Clear();
             richTextBox3.Font = new Font("Consolas", 10);
             richTextBox3.SelectionColor = Color.Black;
@@ -290,9 +311,9 @@ namespace FSS_01.vistas
             int lineCount = richTextBox1.Lines.Length;
             richTextBox3.Clear();
             for (int i = 1; i <= lineCount; i++)
-            {
                 richTextBox3.AppendText(i.ToString() + Environment.NewLine);
-            }
+
+            beautify = false;
         }
 
         private void SyncScroll(RichTextBox source, RichTextBox target)
@@ -302,5 +323,254 @@ namespace FSS_01.vistas
             SendMessage(target.Handle, WM_VSCROLL, (scrollPos << 16) | SB_THUMBPOSITION, 0);
         }
 
+        private void toolStripButton5_Click(object sender, EventArgs e)
+        {
+            analisisLexSic();
+        }
+
+        private void análisisLexSinToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            analisisLexSic();
+        }
+
+        private void paso1ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            primerPaso();
+        }
+
+        private void paso2ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            segundoPaso();
+        }
+
+        private void generarOBJToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            codObjGen();
+        }
+
+        private void ensamblarToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            codObjGen();
+        }
+
+        private void toolStripButton4_Click(object sender, EventArgs e)
+        {
+            codObjGen();
+        }
+
+
+        // Variables para el menú de archivo
+        private bool isSaved = true;
+        private string currentFilePath = string.Empty;
+
+        private void nuevoToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Nuevo archivo
+            if (!isSaved)
+            {
+                DialogResult result = MessageBox.Show("¿Desea guardar los cambios?", "Guardar", MessageBoxButtons.YesNoCancel);
+                if (result == DialogResult.Yes)
+                {
+                    guardarToolStripMenuItem_Click(sender, e);
+                    richTextBox1.Clear();
+                    richTextBox3.Clear();
+                    currentFilePath = string.Empty;
+                    isSaved = true;
+                    splitContainer2.Panel1.Controls.Clear();
+                    splitContainer2.Panel2.Controls.Clear();
+                    toolStripStatusLabel1.Text = "Nuevo archivo";
+                }
+                else if (result == DialogResult.No)
+                {
+                    richTextBox1.Clear();
+                    richTextBox3.Clear();
+                    currentFilePath = string.Empty;
+                    isSaved = true;
+                    splitContainer2.Panel1.Controls.Clear();
+                    splitContainer2.Panel2.Controls.Clear();
+                    toolStripStatusLabel1.Text = "Nuevo archivo";
+                }
+                else if (result == DialogResult.Cancel)
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+            else
+            {
+                richTextBox1.Clear();
+                richTextBox3.Clear();
+                currentFilePath = string.Empty;
+                isSaved = true;
+                splitContainer2.Panel1.Controls.Clear();
+                splitContainer2.Panel2.Controls.Clear();
+                if (currentFilePath != string.Empty)
+                {
+                    toolStripStatusLabel1.Text = currentFilePath;
+                }
+                else
+                {
+                    toolStripStatusLabel1.Text = "Nuevo archivo sin guardar";
+                }   
+            }
+        }
+
+        private void abrirToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Abrir archivo
+            // Verificar si hay cambios sin guardar
+            if (!isSaved)
+            {
+                DialogResult result = MessageBox.Show("¿Desea guardar los cambios?", "Guardar", MessageBoxButtons.YesNoCancel);
+                if (result == DialogResult.Yes)
+                {
+                    guardarToolStripMenuItem_Click(sender, e);
+                }
+                else if (result == DialogResult.No)
+                {
+                    richTextBox1.Clear();
+                    richTextBox3.Clear();
+                    currentFilePath = string.Empty;
+                    isSaved = true;
+                    splitContainer2.Panel1.Controls.Clear();
+                    splitContainer2.Panel2.Controls.Clear();
+                }
+                else if (result == DialogResult.Cancel)
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+
+            // Abrir archivo
+
+            using (OpenFileDialog openFileDialog = new OpenFileDialog())
+            {
+                openFileDialog.Filter = "Archivos de ensamblador (*.asm)|*.asm|Todos los archivos (*.*)|*.*";
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    currentFilePath = openFileDialog.FileName;
+                    string code = System.IO.File.ReadAllText(currentFilePath);
+                    richTextBox1.Clear();
+                    richTextBox1.AppendText(code);
+                    richTextBox1.SelectionStart = 0;
+                    richTextBox1.ScrollToCaret();
+                    isSaved = true;
+                    splitContainer2.Panel1.Controls.Clear();
+                    splitContainer2.Panel2.Controls.Clear();
+                    toolStripStatusLabel1.Text = currentFilePath;
+                }
+                else
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+
+        }
+
+        private void guardarToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Guardar archivo
+            if (string.IsNullOrEmpty(currentFilePath))
+            {
+                using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                {
+                    saveFileDialog.Filter = "Archivos de ensamblador (*.asm)|*.asm|Todos los archivos (*.*)|*.*";
+                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        currentFilePath = saveFileDialog.FileName;
+                        System.IO.File.WriteAllText(currentFilePath, richTextBox1.Text);
+                        isSaved = true;
+                        toolStripStatusLabel1.Text = currentFilePath;
+                    }
+                }
+            }
+            else
+            {
+                System.IO.File.WriteAllText(currentFilePath, richTextBox1.Text);
+                isSaved = true;
+                toolStripStatusLabel1.Text = currentFilePath;
+            }
+        }
+
+        private void guardarComoToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Guardar como
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Filter = "Archivos de ensamblador (*.asm)|*.asm|Todos los archivos (*.*)|*.*";
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    currentFilePath = saveFileDialog.FileName;
+                    System.IO.File.WriteAllText(currentFilePath, richTextBox1.Text);
+                    isSaved = true;
+                    toolStripStatusLabel1.Text = "Archivo guardado como: " + currentFilePath;
+                }
+            }
+        }
+
+        // Para abrir un archivo de ejemplo
+        private void openFromFile(string path)
+        {
+            // Verificar si hay cambios sin guardar
+            if (!isSaved)
+            {
+                DialogResult result = MessageBox.Show("¿Desea guardar los cambios?", "Guardar", MessageBoxButtons.YesNoCancel);
+                if (result == DialogResult.Yes)
+                {
+                    guardarToolStripMenuItem_Click(this, EventArgs.Empty);
+                }
+                else if (result == DialogResult.No)
+                {
+                    richTextBox1.Clear();
+                    richTextBox3.Clear();
+                    currentFilePath = string.Empty;
+                    splitContainer2.Panel1.Controls.Clear();
+                    splitContainer2.Panel2.Controls.Clear();
+                    isSaved = true;
+                }
+                else if (result == DialogResult.Cancel)
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+
+            // Abrir archivo
+            try
+            {
+                string code = System.IO.File.ReadAllText(path);
+                richTextBox1.Clear();
+                richTextBox1.AppendText(code);
+                richTextBox1.SelectionStart = 0;
+                richTextBox1.ScrollToCaret();
+                currentFilePath = path;
+                isSaved = true;
+                toolStripStatusLabel1.Text = currentFilePath;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al abrir el archivo: " + ex.Message);
+            }
+        }
+
+        private void toolStripButton1_Click(object sender, EventArgs e)
+        {
+            // Nuevo archivo
+            nuevoToolStripMenuItem_Click(sender, e);
+        }
+
+        private void toolStripButton2_Click(object sender, EventArgs e)
+        {
+            // Abrir archivo
+            abrirToolStripMenuItem_Click(sender, e);
+        }
+
+        private void toolStripButton3_Click(object sender, EventArgs e)
+        {
+            // Guardar archivo
+            guardarToolStripMenuItem_Click(sender, e);
+        }
     }
 }

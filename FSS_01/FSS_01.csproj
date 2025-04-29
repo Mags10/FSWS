@@ -76,14 +76,18 @@
     <Reference Include="WindowsFormsIntegration" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="sicxe\CompiladorSxHP.cs" />
+    <Compile Include="sicxe\CompiladorSxP2.cs" />
+    <Compile Include="sicxe\CompiladorSxP1.cs" />
     <Compile Include="sicxe\CompiladorSx.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="sicxe\Elementos.cs" />
     <Compile Include="sicxe\ExpParsers.cs" />
     <Compile Include="sicxe\Listeners.cs" />
-    <Content Include="tests\AEA\p01.asm" />
-    <Content Include="tests\AEA\p02.asm" />
-    <Content Include="tests\AEA\p03.asm" />
+    <Content Include="tests\Clase\p01.asm" />
+    <Content Include="tests\Clase\p02.asm" />
+    <Content Include="tests\Clase\p03.asm" />
     <Content Include="tests\P04\ecode2.asm" />
     <Compile Include="vistas\mainView.cs">
       <SubType>Form</SubType>
