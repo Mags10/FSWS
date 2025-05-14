@@ -572,5 +572,180 @@ namespace FSS_01.vistas
             // Guardar archivo
             guardarToolStripMenuItem_Click(sender, e);
         }
+
+        private void cargarToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Abrir un diálogo solicitando la dirección de inicio en hexadecimal
+            string input = "";
+            using (Form prompt = new Form())
+            {
+                prompt.Width = 350;
+                prompt.Height = 150;
+                prompt.Text = "Cargar programa";
+                Label textLabel = new Label() { Left = 20, Top = 20, Text = "Ingrese la dirección de inicio en hexadecimal:", Width = 280 };
+                TextBox inputBox = new TextBox() { Left = 20, Top = 50, Width = 280, Text = "0" };
+                Button confirmation = new Button() { Text = "Aceptar", Left = 150, Width = 80, Top = 80, DialogResult = DialogResult.OK };
+                prompt.Controls.Add(textLabel);
+                prompt.Controls.Add(inputBox);
+                prompt.Controls.Add(confirmation);
+                prompt.AcceptButton = confirmation;
+
+                if (prompt.ShowDialog() == DialogResult.OK)
+                {
+                    input = inputBox.Text;
+                }
+                else
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+
+            int dirProg = 0;
+            try
+            {
+                dirProg = Convert.ToInt32(input, 16);
+            }
+            catch
+            {
+                MessageBox.Show("Dirección inválida. Debe ser un número hexadecimal.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            comp.cargaLiga0();
+            comp.cargaLigaP1(dirProg);
+            comp.cargaLigaP2(dirProg);
+
+            Table tmp = comp.memoryMap;
+            Table tabse = comp.tabseTable;
+
+            // Mostar ventana con dos tablas con dos pestañas
+            // Crear un TabControl
+            TabControl tabControl = new TabControl();
+            tabControl.Dock = DockStyle.Fill;
+            // Crear dos TabPages
+            TabPage tabPage1 = new TabPage("Mapa de Memoria");
+            TabPage tabPage2 = new TabPage("Tabla de Secciones");
+
+            // Agregar las tablas a las pestañas
+            tabPage1.Controls.Add(tmp.dataGridView);
+            tabPage2.Controls.Add(tabse.dataGridView);
+            // Agregar las pestañas al TabControl
+            tabControl.TabPages.Add(tabPage1);
+            tabControl.TabPages.Add(tabPage2);
+            // Crear un Form para mostrar el TabControl
+            Form form = new Form();
+            form.Text = "Cargado y ligado";
+            form.Size = new Size(800, 600);
+            form.Controls.Add(tabControl);
+            form.StartPosition = FormStartPosition.CenterScreen;
+            form.ShowDialog();
+
+
+        }
+
+        private void simularToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Carga y ligado para documentos txt externos
+            // Abrir un diálogo solicitando la dirección de inicio en hexadecimal
+            // Abrir un diálogo solicitando la dirección de inicio en hexadecimal
+            string input = "";
+            using (Form prompt = new Form())
+            {
+                prompt.Width = 350;
+                prompt.Height = 150;
+                prompt.Text = "Cargar programa";
+                Label textLabel = new Label() { Left = 20, Top = 20, Text = "Ingrese la dirección de inicio en hexadecimal:", Width = 280 };
+                TextBox inputBox = new TextBox() { Left = 20, Top = 50, Width = 280, Text = "0" };
+                Button confirmation = new Button() { Text = "Aceptar", Left = 150, Width = 80, Top = 80, DialogResult = DialogResult.OK };
+                prompt.Controls.Add(textLabel);
+                prompt.Controls.Add(inputBox);
+                prompt.Controls.Add(confirmation);
+                prompt.AcceptButton = confirmation;
+
+                if (prompt.ShowDialog() == DialogResult.OK)
+                {
+                    input = inputBox.Text;
+                }
+                else
+                {
+                    toolStripStatusLabel1.Text = "Operación cancelada";
+                    return;
+                }
+            }
+
+            int dirProg = 0;
+            try
+            {
+                dirProg = Convert.ToInt32(input, 16);
+            }
+            catch
+            {
+                MessageBox.Show("Dirección inválida. Debe ser un número hexadecimal.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+
+            // Solicitar los documentos txt, hasta que el usuario diga que ya no quiere agregar mas
+            List<string> files = new List<string>();
+            // Solo permite de uno en uno
+            while (true)
+            {
+                using (OpenFileDialog openFileDialog = new OpenFileDialog())
+                {
+                    openFileDialog.Filter = "Archivos de texto (*.txt)|*.txt|Todos los archivos (*.*)|*.*";
+                    openFileDialog.Multiselect = false;
+                    if (openFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        files.Add(openFileDialog.FileName);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            // Obtener las cadenas de texto de los archivos
+            List<string> codes = new List<string>();
+            foreach (string file in files)
+            {
+                string code = System.IO.File.ReadAllText(file);
+                codes.Add(code);
+            }
+
+            // Cargar y ligar los archivos
+            comp.cargaExt(codes);
+            comp.cargaLigaP1(dirProg);
+            comp.cargaLigaP2(dirProg);
+
+            Table tmp = comp.memoryMap;
+            Table tabse = comp.tabseTable;
+
+            // Mostar ventana con dos tablas con dos pestañas
+            // Crear un TabControl
+            TabControl tabControl = new TabControl();
+            tabControl.Dock = DockStyle.Fill;
+            // Crear dos TabPages
+            TabPage tabPage1 = new TabPage("Mapa de Memoria");
+            TabPage tabPage2 = new TabPage("Tabla de Secciones");
+
+            // Agregar las tablas a las pestañas
+            tabPage1.Controls.Add(tmp.dataGridView);
+            tabPage2.Controls.Add(tabse.dataGridView);
+            // Agregar las pestañas al TabControl
+            tabControl.TabPages.Add(tabPage1);
+            tabControl.TabPages.Add(tabPage2);
+            // Crear un Form para mostrar el TabControl
+            Form form = new Form();
+            form.Text = "Cargado y ligado";
+            form.Size = new Size(800, 600);
+            form.Controls.Add(tabControl);
+            form.StartPosition = FormStartPosition.CenterScreen;
+            form.ShowDialog();
+
+
+
+        }
     }
 }

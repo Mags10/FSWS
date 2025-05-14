@@ -44,6 +44,9 @@
             this.generarOBJToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.ensamblarToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.ejecuciónToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.cargarToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.simularToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.toolStripButton1 = new System.Windows.Forms.ToolStripButton();
             this.toolStripButton2 = new System.Windows.Forms.ToolStripButton();
@@ -82,7 +85,8 @@
             // 
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.archivoToolStripMenuItem,
-            this.ensambladoToolStripMenuItem});
+            this.ensambladoToolStripMenuItem,
+            this.ejecuciónToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
             this.menuStrip1.Size = new System.Drawing.Size(800, 24);
@@ -107,7 +111,7 @@
             this.nuevoToolStripMenuItem.Image = ((System.Drawing.Image)(resources.GetObject("nuevoToolStripMenuItem.Image")));
             this.nuevoToolStripMenuItem.Name = "nuevoToolStripMenuItem";
             this.nuevoToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.nuevoToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.nuevoToolStripMenuItem.Size = new System.Drawing.Size(156, 22);
             this.nuevoToolStripMenuItem.Text = "Nuevo";
             this.nuevoToolStripMenuItem.Click += new System.EventHandler(this.nuevoToolStripMenuItem_Click);
             // 
@@ -211,6 +215,29 @@
             this.ensamblarToolStripMenuItem.Size = new System.Drawing.Size(197, 22);
             this.ensamblarToolStripMenuItem.Text = "Ensamblar";
             this.ensamblarToolStripMenuItem.Click += new System.EventHandler(this.ensamblarToolStripMenuItem_Click);
+            // 
+            // ejecuciónToolStripMenuItem
+            // 
+            this.ejecuciónToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.cargarToolStripMenuItem,
+            this.simularToolStripMenuItem});
+            this.ejecuciónToolStripMenuItem.Name = "ejecuciónToolStripMenuItem";
+            this.ejecuciónToolStripMenuItem.Size = new System.Drawing.Size(70, 20);
+            this.ejecuciónToolStripMenuItem.Text = "Ejecución";
+            // 
+            // cargarToolStripMenuItem
+            // 
+            this.cargarToolStripMenuItem.Name = "cargarToolStripMenuItem";
+            this.cargarToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.cargarToolStripMenuItem.Text = "Cargar y Ligar";
+            this.cargarToolStripMenuItem.Click += new System.EventHandler(this.cargarToolStripMenuItem_Click);
+            // 
+            // simularToolStripMenuItem
+            // 
+            this.simularToolStripMenuItem.Name = "simularToolStripMenuItem";
+            this.simularToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.simularToolStripMenuItem.Text = "Cargar y Ligar EX";
+            this.simularToolStripMenuItem.Click += new System.EventHandler(this.simularToolStripMenuItem_Click);
             // 
             // toolStrip1
             // 
@@ -473,5 +500,8 @@
         private System.Windows.Forms.ToolStripButton toolStripButton4;
         private System.Windows.Forms.ToolStripButton toolStripButton5;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;
+        private System.Windows.Forms.ToolStripMenuItem ejecuciónToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem cargarToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem simularToolStripMenuItem;
     }
 }

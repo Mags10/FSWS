@@ -224,6 +224,8 @@ namespace FSS_01
                     res = -1;
                     // Indicar error de expresión
                     tmpLine.error = "Expresión inválida 2";
+                    // Retornar -1 ABS
+                    return new Tuple<string, int>("ABS", res);
                 }
             }
             else
@@ -237,6 +239,8 @@ namespace FSS_01
                     res = -1;
                     // Indicar error de expresión
                     tmpLine.error = "Simbolo no encontrado";
+                    // Retornar -1 ABS
+                    return new Tuple<string, int>("ABS", res);
                 }
             }
 

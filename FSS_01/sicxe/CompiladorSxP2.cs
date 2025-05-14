@@ -152,7 +152,10 @@ namespace FSS_01
                     {
                         foreach (String regm in line.realregmode)
                         {
-                            var regm2 = regm.Replace("[PNAME]", lineasec[0].etq.GetText()).PadRight(6, ' ').Substring(0, 6);
+                            Console.WriteLine("Regm: " + regm);
+                            var regm2 = regm.Replace("[PNAME]", lineasec[0].etq.GetText()).PadRight(7, ' ').Substring(0, 7);
+                            // En la linea anterior no se considera el signo de + o - que ya viene
+
                             if (line.ins.GetText() == "WORD")
                                 objProg += "M" + (line.cp + sec.bloques[line.bloque].dir).ToString("X").PadLeft(6, '0') + "06" + regm2 + "\n";
                             else
@@ -165,7 +168,8 @@ namespace FSS_01
                             objProg += "M" + (line.cp + sec.bloques[line.bloque].dir).ToString("X").PadLeft(6, '0') + "06+";
                         else
                             objProg += "M" + (line.cp + sec.bloques[line.bloque].dir + 1).ToString("X").PadLeft(6, '0') + "05+";
-                        objProg += lineas[0].etq.GetText().PadRight(6, ' ').Substring(0, 6) + "\n";
+                        objProg += lineasec[0].etq.GetText().PadRight(6, ' ').Substring(0, 6) + "\n";
+                        
                     }
                 }
 
@@ -325,8 +329,10 @@ namespace FSS_01
                                             }
                                             else
                                             {
+                                                b = 1;
+                                                p = 1;
+                                                dir = -1;
                                                 line.error = "La instruccion no es relativa al CP ni a la base";
-                                                break;
                                             }
                                         }
                                     }

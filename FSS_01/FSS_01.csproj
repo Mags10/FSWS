@@ -77,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="sicxe\CompiladorSxHP.cs" />
+    <Compile Include="sicxe\CompiladorSxP3.cs" />
     <Compile Include="sicxe\CompiladorSxP2.cs" />
     <Compile Include="sicxe\CompiladorSxP1.cs" />
     <Compile Include="sicxe\CompiladorSx.cs" />
@@ -116,6 +117,8 @@
     <Content Include="tests\P08\BLOQUES_COPY_START0H.asm" />
     <Content Include="tests\P08\BLOQUES_EJEM2_START0H.asm" />
     <Content Include="tests\P08\BLOQUES_EJERFINAL_START0H.asm" />
+    <Content Include="tests\P10\SECCIONES_EJEMPLO1_PROG_PROG1.asm" />
+    <Content Include="tests\P10\SECCIONES_EJEMPLO2_PRINCIPAL_MODULO.asm" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
